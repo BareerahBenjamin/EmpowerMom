@@ -1,0 +1,38 @@
+# ── 构建输出 ──────────────────────────────────────────────────────────────────
+/build
+app/build
+**/build/
+
+# ── Gradle ───────────────────────────────────────────────────────────────────
+.gradle/
+gradle/wrapper/gradle-wrapper.jar   # 建议保留此行注释，wrapper jar 可选提交
+local.properties                    # SDK 路径，每台机器不同，不提交
+
+# ── Android Studio / IntelliJ ─────────────────────────────────────────────────
+*.iml
+.idea/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+
+# ── 敏感信息（绝不提交）─────────────────────────────────────────────────────
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
+google-services.json                # Firebase 配置（含 API Key）
+GoogleService-Info.plist
+
+# ── 系统文件 ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── 生成文件 ──────────────────────────────────────────────────────────────────
+app/schemas/                        # Room schema 导出（可按需保留）
+captures/
+.externalNativeBuild/
+.cxx/

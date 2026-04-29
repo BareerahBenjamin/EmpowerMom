@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">暖心留言板</string>
+    <string name="tab_all">全部</string>
+    <string name="tab_emotion">情绪树洞</string>
+    <string name="tab_parenting">育儿求助</string>
+    <string name="tab_experience">经验分享</string>
+    <string name="tab_recovery">身材恢复</string>
+    <string name="write_message">写心事</string>
+    <string name="ai_response_label">AI 回应</string>
+    <string name="crisis_support_title">💙 你不是一个人</string>
+    <string name="crisis_hotline">如果你需要帮助，请拨打心理援助热线：400-161-9995</string>
+    <string name="anonymous_label">匿名发布</string>
+    <string name="publish_button">发布</string>
+</resources>

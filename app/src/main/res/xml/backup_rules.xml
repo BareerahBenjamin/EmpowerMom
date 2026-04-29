@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 11 及以下的自动备份规则（fullBackupContent）
+    https://developer.android.com/guide/topics/data/autobackup
+-->
+<full-backup-content>
+    <!-- 不备份数据库 -->
+    <exclude domain="database" path="empowermom.db" />
+    <exclude domain="database" path="empowermom.db-shm" />
+    <exclude domain="database" path="empowermom.db-wal" />
+    <!-- 不备份 SharedPreferences / DataStore -->
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>

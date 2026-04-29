@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    控制 Android 12+ 的数据迁移（云备份 / 设备间迁移）规则
+    https://developer.android.com/guide/topics/data/autobackup
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- 不备份数据库（含用户隐私留言数据） -->
+        <exclude domain="database" path="empowermom.db" />
+        <exclude domain="database" path="empowermom.db-shm" />
+        <exclude domain="database" path="empowermom.db-wal" />
+        <!-- 不备份 SharedPreferences / DataStore -->
+        <exclude domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="empowermom.db" />
+        <exclude domain="database" path="empowermom.db-shm" />
+        <exclude domain="database" path="empowermom.db-wal" />
+        <exclude domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>
