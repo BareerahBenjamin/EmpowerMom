@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import android.util.Log
+
 // ── UI State ──────────────────────────────────────────────────────────────────
 
 data class MessageBoardUiState(
@@ -141,25 +143,32 @@ class MessageBoardViewModel @Inject constructor(
 
     private fun submitMessage() {
         val editor = _uiState.value.editorState
-        if (!editor.isValid) return
+        Log.d("Submit", "1. 进入 submitMessage, content=${editor.content}, category=${editor.selectedCategory}, tags=${editor.selectedTags}")
+
+        if (!editor.isValid) {
+            Log.d("Submit", "2. 校验未通过！isValid=false. content非空=${editor.content.isNotBlank()}, 选了分区=${editor.selectedCategory != null}")
+            return
+        }
+        Log.d("Submit", "2. 校验通过，准备调 repository")
 
         viewModelScope.launch {
             _uiState.update { it.copy(editorState = it.editorState.copy(isSubmitting = true)) }
             try {
-                val author = if (editor.isAnonymous || editor.nickname.isBlank()) {
-                    "匿名妈妈"
-                } else {
-                    editor.nickname
-                }
-                repository.postMessage(
+                val author = if (editor.isAnonymous || editor.nickname.isBlank()) "匿名妈妈" else editor.nickname
+                Log.d("Submit", "3. 开始写数据库, author=$author")
+
+                val newId = repository.postMessage(
                     content = editor.content,
                     category = editor.selectedCategory!!,
                     tags = editor.selectedTags,
                     author = author,
                     isAnonymous = editor.isAnonymous
                 )
+                Log.d("Submit", "4. 数据库写入成功! 新留言ID=$newId")
                 closeEditor()
+                Log.d("Submit", "5. 编辑器已关闭")
             } catch (e: Exception) {
+                Log.e("Submit", "❌ 发布失败！异常: ${e.message}", e)
                 _uiState.update {
                     it.copy(editorState = it.editorState.copy(
                         isSubmitting = false,
