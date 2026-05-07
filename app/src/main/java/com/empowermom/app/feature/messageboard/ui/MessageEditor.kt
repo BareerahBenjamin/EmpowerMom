@@ -61,53 +61,17 @@ fun MessageEditor(
                 .align(Alignment.BottomCenter)
                 .background(MaterialTheme.colorScheme.background)
                 .clickable(enabled = false) {} // 拦截点击，防止关闭
+
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 24.dp)
+
+
         ) {
-            // ── 标题栏 ─────────────────────────────────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("分享你的故事", style = MaterialTheme.typography.headlineMedium)
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Outlined.Close, contentDescription = "关闭")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── 1. 选择分区 ────────────────────────────────────────────────────
-            SectionLabel(text = "选择主题分区", required = true)
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MessageCategory.entries.forEach { category ->
-                    val isSelected = editorState.selectedCategory == category
-                    CategoryCard(
-                        category = category,
-                        isSelected = isSelected,
-                        onClick = { onCategorySelect(category) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── 2. 输入内容 ────────────────────────────────────────────────────
-            SectionLabel(text = "内容", required = true)
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = editorState.content,
-                onValueChange = onContentChange,
+            // ★ 第一层：可滚动的内容区（占满除底部按钮外的所有空间）
+            Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
                     .heightIn(min = 160.dp),
                 placeholder = {
@@ -124,7 +88,7 @@ fun MessageEditor(
                 )
             )
 
-// 字数统计
+            // 字数统计
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -166,10 +130,22 @@ fun MessageEditor(
                         isSelected = isSelected,
                         onClick = { onTagToggle(tag) }
                     )
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 24.dp)
+            ) {
+                // ── 标题栏 ─────────────────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("分享你的故事", style = MaterialTheme.typography.headlineMedium)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Outlined.Close, contentDescription = "关闭")
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
         // ── 4. 匿名设置 ────────────────────────────────────────────────────
             val nicknameFocusRequester = remember { FocusRequester() }
@@ -216,44 +192,173 @@ fun MessageEditor(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outline
                             )
+                // ── 1. 选择分区 ────────────────────────────────────────────────────
+                SectionLabel(text = "选择主题分区", required = true)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MessageCategory.entries.forEach { category ->
+                        val isSelected = editorState.selectedCategory == category
+                        CategoryCard(
+                            category = category,
+                            isSelected = isSelected,
+                            onClick = { onCategorySelect(category) },
+                            modifier = Modifier.weight(1f)
+
                         )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            // ── 5. 发布按钮 ────────────────────────────────────────────────────
-            Button(
-                onClick = onSubmit,
-                enabled = editorState.isValid && !editorState.isSubmitting,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(0.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = MaterialTheme.colorScheme.outline
-                )
-            ) {
-                if (editorState.isSubmitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                // ── 2. 输入内容 ────────────────────────────────────────────────────
+                SectionLabel(text = "内容", required = true)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = editorState.content,
+                    onValueChange = onContentChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 160.dp),
+                    placeholder = {
+                        Text(
+                            "分享你的心情、困惑或经验...",
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    },
+                    maxLines = 10,
+                    shape = RoundedCornerShape(0.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
                     )
-                } else {
-                    Text("发布", style = MaterialTheme.typography.labelLarge)
+                )
+
+                // 字数统计
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    val isNearLimit = editorState.charCount > 450
+                    Text(
+                        text = "${editorState.charCount}/500",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isNearLimit) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.secondary
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ── 3. 预置标签 ────────────────────────────────────────────────────
+                SectionLabel(text = "添加标签（可选，最多3个）")
+                Spacer(modifier = Modifier.height(12.dp))
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    presetTags.forEach { tag ->
+                        val isSelected = tag in editorState.selectedTags
+                        TagChip(
+                            text = tag,
+                            isSelected = isSelected,
+                            onClick = { onTagToggle(tag) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ── 4. 匿名设置 ────────────────────────────────────────────────────
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(
+                        checked = editorState.isAnonymous,
+                        onCheckedChange = onAnonymousChange,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("匿名发布", style = MaterialTheme.typography.bodyMedium)
+
+                    AnimatedVisibility(visible = !editorState.isAnonymous) {
+                        Row {
+                            Spacer(modifier = Modifier.width(16.dp))
+                            OutlinedTextField(
+                                value = editorState.nickname,
+                                onValueChange = onNicknameChange,
+                                modifier = Modifier.width(160.dp),
+                                placeholder = {
+                                    Text("输入昵称", color = MaterialTheme.colorScheme.secondary)
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(0.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 错误提示
-            editorState.submitError?.let { error ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+            // ★ 第二层：固定在底部的发布按钮区
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                // 顶部分割线
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline,
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
+
+                // ── 5. 发布按钮 ────────────────────────────────────────────────────
+                Button(
+                    onClick = onSubmit,
+                    enabled = editorState.isValid && !editorState.isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(0.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.outline
+                    )
+                ) {
+                    if (editorState.isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("发布", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+
+                // 错误提示
+                editorState.submitError?.let { error ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     }

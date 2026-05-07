@@ -114,22 +114,21 @@ fun MessageBoardScreen(
                     }
                 }
             }
-
-            // ── 半屏编辑器（写留言）────────────────────────────────────────────
-            if (uiState.isEditorOpen) {
-                MessageEditor(
-                    editorState = uiState.editorState,
-                    presetTags = viewModel.presetTags,
-                    onDismiss = { viewModel.handleIntent(MessageBoardIntent.CloseEditor) },
-                    onContentChange = { viewModel.handleIntent(MessageBoardIntent.UpdateEditorContent(it)) },
-                    onCategorySelect = { viewModel.handleIntent(MessageBoardIntent.SelectEditorCategory(it)) },
-                    onTagToggle = { viewModel.handleIntent(MessageBoardIntent.ToggleTag(it)) },
-                    onAnonymousChange = { viewModel.handleIntent(MessageBoardIntent.SetAnonymous(it)) },
-                    onNicknameChange = { viewModel.handleIntent(MessageBoardIntent.UpdateNickname(it)) },
-                    onSubmit = { viewModel.handleIntent(MessageBoardIntent.SubmitMessage) }
-                )
-            }
         }
+    }
+    // ── 半屏编辑器（写留言）────────────────────────────────────────────
+    if (uiState.isEditorOpen) {
+        MessageEditor(
+            editorState = uiState.editorState,
+            presetTags = viewModel.presetTags,
+            onDismiss = { viewModel.handleIntent(MessageBoardIntent.CloseEditor) },
+            onContentChange = { viewModel.handleIntent(MessageBoardIntent.UpdateEditorContent(it)) },
+            onCategorySelect = { viewModel.handleIntent(MessageBoardIntent.SelectEditorCategory(it)) },
+            onTagToggle = { viewModel.handleIntent(MessageBoardIntent.ToggleTag(it)) },
+            onAnonymousChange = { viewModel.handleIntent(MessageBoardIntent.SetAnonymous(it)) },
+            onNicknameChange = { viewModel.handleIntent(MessageBoardIntent.UpdateNickname(it)) },
+            onSubmit = { viewModel.handleIntent(MessageBoardIntent.SubmitMessage) }
+        )
     }
 }
 
