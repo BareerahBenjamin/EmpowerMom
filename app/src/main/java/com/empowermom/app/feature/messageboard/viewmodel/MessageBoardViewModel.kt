@@ -3,11 +3,13 @@ package com.empowermom.app.feature.messageboard.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.empowermom.app.core.data.repository.MessageRepository
+import com.empowermom.app.core.data.repository.DraftRepository
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
 import com.empowermom.app.feature.messageboard.model.PresetTags
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -32,7 +34,7 @@ data class EditorState(
     val isSubmitting: Boolean = false,
     val submitError: String? = null
 ) {
-    val isValid: Boolean get() = content.isNotBlank() && selectedCategory != null
+    val isValid: Boolean get() = content.isNotBlank() && selectedCategory != null && charCount < 500
     val charCount: Int get() = content.length
 }
 
@@ -56,7 +58,8 @@ sealed class MessageBoardIntent {
 
 @HiltViewModel
 class MessageBoardViewModel @Inject constructor(
-    private val repository: MessageRepository
+    private val repository: MessageRepository,
+    private val draftRepository: DraftRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessageBoardUiState(isLoading = true))
@@ -104,7 +107,31 @@ class MessageBoardViewModel @Inject constructor(
     }
 
     private fun openEditor() {
-        _uiState.update { it.copy(isEditorOpen = true) }
+        viewModelScope.launch {
+            // 一次性读取草稿（combine 三个 Flow 取第一个值）
+            val content = draftRepository.draftContent.first()
+            val categoryStr = draftRepository.draftCategory.first()
+            val tagsStr = draftRepository.draftTags.first()
+
+            val category = if (categoryStr.isNotBlank()) {
+                MessageCategory.entries.find { it.name == categoryStr }
+            } else null
+
+            val tags = if (tagsStr.isNotBlank()) {
+                tagsStr.split(",").filter { it.isNotBlank() }
+            } else emptyList()
+
+            _uiState.update {
+                it.copy(
+                    isEditorOpen = true,
+                    editorState = EditorState(
+                        content = content,
+                        selectedCategory = category,
+                        selectedTags = tags
+                    )
+                )
+            }
+        }
     }
 
     private fun closeEditor() {
@@ -114,10 +141,27 @@ class MessageBoardViewModel @Inject constructor(
     private fun updateContent(content: String) {
         if (content.length > 500) return
         _uiState.update { it.copy(editorState = it.editorState.copy(content = content)) }
+        // 自动保存草稿
+        viewModelScope.launch {
+            val editor = _uiState.value.editorState
+            draftRepository.saveDraft(
+                content = content,
+                category = editor.selectedCategory?.name ?: "",
+                tags = editor.selectedTags
+            )
+        }
     }
 
     private fun selectEditorCategory(category: MessageCategory) {
         _uiState.update { it.copy(editorState = it.editorState.copy(selectedCategory = category)) }
+        viewModelScope.launch {
+            val editor = _uiState.value.editorState
+            draftRepository.saveDraft(
+                content = editor.content,
+                category = category.name,
+                tags = editor.selectedTags
+            )
+        }
     }
 
     private fun toggleTag(tag: String) {
@@ -129,6 +173,15 @@ class MessageBoardViewModel @Inject constructor(
             currentTags.add(tag)
         }
         _uiState.update { it.copy(editorState = it.editorState.copy(selectedTags = currentTags)) }
+        // 自动保存草稿
+        viewModelScope.launch {
+            val editor = _uiState.value.editorState
+            draftRepository.saveDraft(
+                content = editor.content,
+                category = editor.selectedCategory?.name ?: "",
+                tags = currentTags
+            )
+        }
     }
 
     private fun setAnonymous(isAnonymous: Boolean) {
@@ -141,8 +194,20 @@ class MessageBoardViewModel @Inject constructor(
 
     private fun submitMessage() {
         val editor = _uiState.value.editorState
-        if (!editor.isValid) return
 
+        // 逐项校验，给出具体提示
+        val validationError = when {
+            editor.selectedCategory == null -> "请选择主题分区"
+            editor.content.isBlank() -> "请输入内容"
+            !editor.isAnonymous && editor.nickname.isBlank() -> "请输入昵称"
+            else -> null
+        }
+        if (validationError != null) {
+            _uiState.update {
+                it.copy(editorState = it.editorState.copy(submitError = validationError))
+            }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(editorState = it.editorState.copy(isSubmitting = true)) }
             try {
@@ -158,6 +223,7 @@ class MessageBoardViewModel @Inject constructor(
                     author = author,
                     isAnonymous = editor.isAnonymous
                 )
+                draftRepository.clearDraft()
                 closeEditor()
             } catch (e: Exception) {
                 _uiState.update {

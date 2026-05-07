@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -14,6 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.empowermom.app.feature.messageboard.model.MessageCategory
 import com.empowermom.app.feature.messageboard.viewmodel.EditorState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+
 
 /**
  * 写留言半屏编辑器
@@ -55,6 +61,7 @@ fun MessageEditor(
                 .align(Alignment.BottomCenter)
                 .background(MaterialTheme.colorScheme.background)
                 .clickable(enabled = false) {} // 拦截点击，防止关闭
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 24.dp)
         ) {
@@ -117,19 +124,30 @@ fun MessageEditor(
                 )
             )
 
-            // 字数统计
+// 字数统计
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
                 val isNearLimit = editorState.charCount > 450
-                Text(
-                    text = "${editorState.charCount}/500",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isNearLimit) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.secondary
-                )
+                val isAtLimit = editorState.charCount >= 500
+                Column(horizontalAlignment = Alignment.End) {
+                    if (isAtLimit) {
+                        Text(
+                            text = "已达字数上限",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Text(
+                        text = "${editorState.charCount}/500",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isNearLimit) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
+
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -153,7 +171,18 @@ fun MessageEditor(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── 4. 匿名设置 ────────────────────────────────────────────────────
+        // ── 4. 匿名设置 ────────────────────────────────────────────────────
+            val nicknameFocusRequester = remember { FocusRequester() }
+
+        // 监听 isAnonymous 变化，取消匿名时自动聚焦
+            LaunchedEffect(editorState.isAnonymous) {
+                if (!editorState.isAnonymous) {
+                    // 稍微延迟一下，等 AnimatedVisibility 展开后再聚焦
+                    kotlinx.coroutines.delay(150)
+                    nicknameFocusRequester.requestFocus()
+                }
+            }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -175,7 +204,9 @@ fun MessageEditor(
                         OutlinedTextField(
                             value = editorState.nickname,
                             onValueChange = onNicknameChange,
-                            modifier = Modifier.width(160.dp),
+                            modifier = Modifier
+                                .width(160.dp)
+                                .focusRequester(nicknameFocusRequester),
                             placeholder = {
                                 Text("输入昵称", color = MaterialTheme.colorScheme.secondary)
                             },
