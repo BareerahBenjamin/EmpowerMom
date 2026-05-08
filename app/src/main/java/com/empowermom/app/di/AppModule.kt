@@ -76,4 +76,25 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
     }
+    @Provides
+    @Singleton
+    @com.empowermom.app.di.DeepSeekRetrofit
+    fun provideDeepSeekRetrofit(okHttpClient: OkHttpClient, gson: Gson): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://api.deepseek.com/v1/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideDeepSeekApiService(
+        @com.empowermom.app.di.DeepSeekRetrofit retrofit: Retrofit
+    ): com.empowermom.app.core.network.DeepSeekApiService {
+        return retrofit.create(com.empowermom.app.core.network.DeepSeekApiService::class.java)
+    }
 }
+@javax.inject.Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DeepSeekRetrofit

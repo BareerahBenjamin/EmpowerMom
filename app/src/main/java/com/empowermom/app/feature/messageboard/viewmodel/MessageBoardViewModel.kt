@@ -232,6 +232,18 @@ class MessageBoardViewModel @Inject constructor(
                 Log.d("Submit", "4. 数据库写入成功! 新留言ID=$newId")
                 closeEditor()
                 Log.d("Submit", "5. 编辑器已关闭")
+                // 异步触发 AI 回应（不阻塞 UI）
+                viewModelScope.launch {
+                    try {
+                        Log.d("Submit", "6. 开始请求 AI 回应...")
+                        val aiResponse = repository.generateAiResponse(editor.content)
+                        repository.updateAiResponse(newId, aiResponse)
+                        Log.d("Submit", "7. ✅ AI 回应已写入: $aiResponse")
+                    } catch (e: Exception) {
+                        Log.e("Submit", "❌ AI 回应失败: ${e.message}", e)
+                        repository.updateAiResponse(newId, "谢谢你愿意分享这些。")
+                    }
+                }
             } catch (e: Exception) {
                 Log.e("Submit", "❌ 发布失败！异常: ${e.message}", e)
                 _uiState.update {

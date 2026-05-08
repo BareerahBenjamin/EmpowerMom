@@ -24,7 +24,8 @@ class MessageRepository @Inject constructor(
     private val messageDao: MessageDao,
     private val replyDao: ReplyDao,
     private val userInteractionDao: UserInteractionDao,
-    private val gson: Gson
+    private val gson: Gson,
+    private val deepSeekApiService: com.empowermom.app.core.network.DeepSeekApiService
 ) {
 
     // ── 查询留言列表（响应式，带分类过滤）──────────────────────────────────────
@@ -79,6 +80,32 @@ class MessageRepository @Inject constructor(
 
     suspend fun updateAiResponse(messageId: Long, response: String) {
         messageDao.updateAiResponse(messageId, response)
+    }
+    // ── 生成 AI 回应 ──────────────────────────────────────────────────────────
+
+    suspend fun generateAiResponse(content: String): String {
+        val systemPrompt = "你是一个温柔的情绪支持助手，专门帮助产后妈妈。请用50-80字给予共情回应，不要说教，避免使用'应该''必须'等词语。"
+
+        val request = com.empowermom.app.core.network.DeepSeekRequest(
+            messages = listOf(
+                com.empowermom.app.core.network.DeepSeekMessage(
+                    role = "system",
+                    content = systemPrompt
+                ),
+                com.empowermom.app.core.network.DeepSeekMessage(
+                    role = "user",
+                    content = content
+                )
+            )
+        )
+
+        val response = deepSeekApiService.chatCompletion(
+            authorization = "Bearer ${com.empowermom.app.BuildConfig.DEEPSEEK_API_KEY}",
+            request = request
+        )
+
+        return response.choices.firstOrNull()?.message?.content
+            ?: "谢谢你愿意分享这些。"
     }
 
     // ── 点赞 / 取消点赞 ───────────────────────────────────────────────────────
