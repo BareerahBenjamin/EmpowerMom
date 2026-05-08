@@ -131,6 +131,35 @@ class MessageRepository @Inject constructor(
         )
         return replyDao.insertReply(entity)
     }
+    // ── 查询单条留言（含回复，响应式）──────────────────────────────────────────
+
+    fun observeMessageWithReplies(messageId: Long): Flow<Message?> {
+        val repliesFlow = replyDao.observeRepliesByMessageId(messageId)
+
+        return repliesFlow.map { replyEntities ->
+            val messageEntity = messageDao.getMessageById(messageId) ?: return@map null
+            val likedIds = userInteractionDao.getLikedMessageIds().toSet()
+            val resonatedIds = userInteractionDao.getResonatedMessageIds().toSet()
+
+            val replies = replyEntities.map { entity ->
+                Reply(
+                    id = entity.id,
+                    messageId = entity.messageId,
+                    content = entity.content,
+                    author = entity.author,
+                    timestamp = Date(entity.timestamp),
+                    isAnonymous = entity.isAnonymous
+                )
+            }
+
+            messageEntity.toMessage(
+                replies = replies,
+                isLiked = messageEntity.id in likedIds,
+                isResonated = messageEntity.id in resonatedIds,
+                gson = gson
+            )
+        }
+    }
 
     // ── Entity → Domain Model 映射 ────────────────────────────────────────────
 

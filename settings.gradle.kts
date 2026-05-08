@@ -1,9 +1,13 @@
 pluginManagement {
     repositories {
-        // 华为云镜像（已验证可访问）
+        // 华为云镜像（国内稳定）
         maven { url = uri("https://mirrors.huaweicloud.com/repository/maven/") }
         maven { url = uri("https://mirrors.huaweicloud.com/repository/gradle-plugin/") }
-        // 兜底
+        // 阿里云镜像（兜底）
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        // 官方源（最后兜底）
         gradlePluginPortal()
         google()
         mavenCentral()
@@ -20,9 +24,12 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // 华为云镜像（已验证可访问）
+        // 华为云镜像
         maven { url = uri("https://mirrors.huaweicloud.com/repository/maven/") }
-        // 兜底
+        // 阿里云镜像（兜底）
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        // 官方源
         google()
         mavenCentral()
     }

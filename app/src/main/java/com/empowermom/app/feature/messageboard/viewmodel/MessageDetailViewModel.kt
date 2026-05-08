@@ -27,8 +27,17 @@ class MessageDetailViewModel @Inject constructor(
     val uiState: StateFlow<MessageDetailUiState> = _uiState.asStateFlow()
 
     fun loadMessage(messageId: Long) {
-        // TODO: 从 repository 加载完整留言（含回复）
-        // 实际实现时用 repository.observeMessageWithReplies(messageId) 流式更新
+        viewModelScope.launch {
+            repository.observeMessageWithReplies(messageId).collect { message ->
+                _uiState.update { current ->
+                    current.copy(
+                        message = message,
+                        isLoading = false,
+                        error = if (message == null) "留言不存在或已被删除" else null
+                    )
+                }
+            }
+        }
     }
 
     fun toggleLike(messageId: Long) {
