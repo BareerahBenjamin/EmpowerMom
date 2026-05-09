@@ -48,6 +48,19 @@ fun MessageDetailScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+
+                // 错误提示（仅在有错误时显示）
+                uiState.replyError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -56,26 +69,43 @@ fun MessageDetailScreen(
                 ) {
                     OutlinedTextField(
                         value = replyText,
-                        onValueChange = { replyText = it },
+                        onValueChange = {
+                            replyText = it
+                            // 用户开始编辑时，清掉之前的错误提示
+                            if (uiState.replyError != null) {
+                                viewModel.clearReplyError()
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("写下你的回复...") },
                         singleLine = true,
-                        shape = MaterialTheme.shapes.small
+                        shape = MaterialTheme.shapes.small,
+                        // 发送中禁用输入
+                        enabled = !uiState.isPostingReply
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (replyText.isNotBlank()) {
-                                viewModel.postReply(messageId, replyText)
-                                replyText = ""
+                            if (replyText.isNotBlank() && !uiState.isPostingReply) {
+                                viewModel.postReply(
+                                    messageId = messageId,
+                                    content = replyText,
+                                    onSuccess = { replyText = "" }
+                                )
                             }
                         },
                         shape = MaterialTheme.shapes.small,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
-                        )
+                        ),
+                        // 发送中或内容为空时禁用按钮
+                        enabled = replyText.isNotBlank() && !uiState.isPostingReply
                     ) {
-                        Text("发送")
+                        if (uiState.isPostingReply) {
+                            Text("发送中...")
+                        } else {
+                            Text("发送")
+                        }
                     }
                 }
             }
