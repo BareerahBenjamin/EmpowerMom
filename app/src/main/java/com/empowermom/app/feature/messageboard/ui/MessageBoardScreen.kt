@@ -414,11 +414,10 @@ fun MessageCard(
                 }
             }
 
-            // ── AI 回应区块（对应 HTML 的灰色背景区）────────────────────────
-            if (message.aiResponse.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                AiResponseBlock(response = message.aiResponse)
-            }
+            // — AI 回应区块（对应 HTML 的灰色背景区）-
+            // 不再判断 aiResponse 是否为空——空时显示 Loading 态，避免空白
+            Spacer(modifier = Modifier.height(12.dp))
+            AiResponseBlock(response = message.aiResponse)
 
             // ── 危机干预提示 ──────────────────────────────────────────────────
             if (message.isCrisis) {
@@ -460,6 +459,8 @@ private fun InteractionButton(
 
 @Composable
 private fun AiResponseBlock(response: String) {
+    val isLoading = response.isBlank()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -488,11 +489,22 @@ private fun AiResponseBlock(response: String) {
             )
         }
         Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = response,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.secondary
-        )
+
+        if (isLoading) {
+            // Loading 态：温柔的等待文案
+            Text(
+                text = "AI 正在认真思考你的话……",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f)
+            )
+        } else {
+            // 已有回应：显示真实内容
+            Text(
+                text = response,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
     }
 }
 
