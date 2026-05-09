@@ -1,6 +1,8 @@
 package com.empowermom.app.feature.messageboard.ui
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -461,6 +463,18 @@ private fun InteractionButton(
 private fun AiResponseBlock(response: String) {
     val isLoading = response.isBlank()
 
+    // Loading 态的呼吸动画：透明度在 0.3-1.0 之间循环，像在思考
+    val infiniteTransition = rememberInfiniteTransition(label = "ai_loading")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ai_loading_alpha"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -491,11 +505,12 @@ private fun AiResponseBlock(response: String) {
         Spacer(modifier = Modifier.height(6.dp))
 
         if (isLoading) {
-            // Loading 态：温柔的等待文案
+            // Loading 态：温柔的等待文案 + 呼吸动画
             Text(
                 text = "AI 正在认真思考你的话……",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.alpha(alpha)
             )
         } else {
             // 已有回应：显示真实内容
