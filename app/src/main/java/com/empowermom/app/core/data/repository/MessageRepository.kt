@@ -7,6 +7,7 @@ import com.empowermom.app.core.data.local.entity.MessageEntity
 import com.empowermom.app.core.data.local.entity.ReplyEntity
 import com.empowermom.app.core.data.local.entity.UserInteractionEntity
 import com.empowermom.app.feature.messageboard.model.CrisisKeywords
+import com.empowermom.app.core.network.PromptTemplates
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
 import com.empowermom.app.feature.messageboard.model.Reply
@@ -85,8 +86,8 @@ class MessageRepository @Inject constructor(
     }
     // ── 生成 AI 回应 ──────────────────────────────────────────────────────────
 
-    suspend fun generateAiResponse(content: String): String {
-        val systemPrompt = "你是一个温柔的情绪支持助手，专门帮助产后妈妈。请用50-80字给予共情回应，不要说教，避免使用'应该''必须'等词语。"
+    suspend fun generateAiResponse(content: String, category: MessageCategory): String {
+        val systemPrompt = PromptTemplates.forCategory(category)
 
         val request = com.empowermom.app.core.network.DeepSeekRequest(
             messages = listOf(

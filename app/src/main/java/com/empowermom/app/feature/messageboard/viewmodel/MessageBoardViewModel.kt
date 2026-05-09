@@ -254,7 +254,7 @@ class MessageBoardViewModel @Inject constructor(
                 viewModelScope.launch {
                     try {
                         Log.d("Submit", "6. 开始请求 AI 回应...")
-                        val aiResponse = repository.generateAiResponse(editor.content)
+                        val aiResponse = repository.generateAiResponse(editor.content, editor.selectedCategory!!)
                         repository.updateAiResponse(newId, aiResponse)
                         Log.d("Submit", "7. ✅ AI 回应已写入: $aiResponse")
                     } catch (e: Exception) {
