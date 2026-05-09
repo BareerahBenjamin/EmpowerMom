@@ -92,3 +92,30 @@ object CrisisKeywords {
     fun detect(content: String): Boolean =
         keywords.any { content.contains(it) }
 }
+
+/**
+ * 心理援助热线
+ *
+ * 当检测到危机内容时，详情页会展示这些热线信息。
+ * 数据需谨慎维护——这些号码直接关系到用户的紧急求助。
+ */
+object CrisisHotlines {
+    data class Hotline(
+        val name: String,
+        val number: String,
+        val description: String
+    )
+
+    val all = listOf(
+        Hotline(
+            name = "全国心理援助热线",
+            number = "12356",
+            description = "国家卫健委统一心理援助热线 · 24小时"
+        ),
+        Hotline(
+            name = "希望24热线",
+            number = "400-161-9995",
+            description = "生命危机干预专线 · 24小时免费"
+        )
+    )
+}

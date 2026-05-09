@@ -7,8 +7,10 @@ import com.empowermom.app.core.data.repository.DraftRepository
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
 import com.empowermom.app.feature.messageboard.model.PresetTags
+import com.empowermom.app.feature.messageboard.model.CrisisKeywords
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import android.util.Log
@@ -64,6 +66,14 @@ class MessageBoardViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MessageBoardUiState(isLoading = true))
     val uiState: StateFlow<MessageBoardUiState> = _uiState.asStateFlow()
+
+    // 危机帖发布后，发出跳转事件让 UI 跳转到详情页
+    private val _navigateToDetail = MutableSharedFlow<Long>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val navigateToDetail: SharedFlow<Long> = _navigateToDetail.asSharedFlow()
 
     // 当前分类筛选
     private val selectedCategory = MutableStateFlow<MessageCategory?>(null)
@@ -232,6 +242,14 @@ class MessageBoardViewModel @Inject constructor(
                 Log.d("Submit", "4. 数据库写入成功! 新留言ID=$newId")
                 closeEditor()
                 Log.d("Submit", "5. 编辑器已关闭")
+
+                // 危机帖：发出跳转事件，让 UI 跳转到详情页
+                // 因为列表已过滤 isHidden，作者本人也看不到，所以发完直接跳详情页让作者看到心理援助卡片
+                if (CrisisKeywords.detect(editor.content)) {
+                    Log.d("Submit", "5.5 ⚠️ 检测到危机内容，发出跳转事件，目标ID=$newId")
+                    _navigateToDetail.tryEmit(newId)
+                }
+
                 // 异步触发 AI 回应（不阻塞 UI）
                 viewModelScope.launch {
                     try {

@@ -100,6 +100,27 @@ fun MessageDetailScreen(
                     )
                 }
 
+                // 危机帖：在评论区顶部置顶心理援助热线卡片
+                if (message.isCrisis) {
+                    item {
+                        CrisisHotlineCard()
+                    }
+                }
+
+                // 危机帖：给作者一行提示，让 ta 知道为什么帖子在列表看不到
+                if (message.isCrisis) {
+                    item {
+                        Text(
+                            text = "💗 这条留言因为含有让我们担心的词，暂时只有你能看到。我们想先把它好好接住。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
                 // 回复列表标题
                 item {
                     Row(
@@ -166,5 +187,75 @@ private fun ReplyItem(reply: com.empowermom.app.feature.messageboard.model.Reply
         Text(reply.content, style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(8.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+    }
+}
+
+@Composable
+private fun CrisisHotlineCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+        ),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // 标题：温柔但能让人停下来
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "你不是一个人",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "如果你正在经历很难的时刻，请记得有人愿意听你说话：",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 遍历所有热线
+            com.empowermom.app.feature.messageboard.model.CrisisHotlines.all.forEach { hotline ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = hotline.name,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = hotline.number,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = hotline.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }

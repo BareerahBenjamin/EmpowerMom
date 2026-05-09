@@ -41,7 +41,9 @@ class MessageRepository @Inject constructor(
             val likedIds = userInteractionDao.getLikedMessageIds().toSet()
             val resonatedIds = userInteractionDao.getResonatedMessageIds().toSet()
 
-            entities.map { entity ->
+            // 危机帖（isHidden = true）从列表中过滤掉，避免其他妈妈看到。
+            // TODO(C): 等有用户系统后，让作者本人能看到自己的危机帖。
+            entities.filter { !it.isHidden }.map { entity ->
                 val replies = replyDao.observeRepliesByMessageId(entity.id)
                 entity.toMessage(
                     replies = emptyList(), // 列表页不加载回复，详情页加载

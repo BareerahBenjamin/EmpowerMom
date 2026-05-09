@@ -18,6 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.collectLatest
 import com.empowermom.app.core.ui.theme.EmpowerMomColors
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
@@ -38,6 +41,12 @@ fun MessageBoardScreen(
     viewModel: MessageBoardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 监听跳转事件：危机帖发布后自动跳转到详情页
+    LaunchedEffect(Unit) {
+        viewModel.navigateToDetail.collectLatest { messageId ->
+            onNavigateToDetail(messageId)
+        }
+    }
 
     Scaffold(
         // ── 顶部导航栏 ──────────────────────────────────────────────────────────
