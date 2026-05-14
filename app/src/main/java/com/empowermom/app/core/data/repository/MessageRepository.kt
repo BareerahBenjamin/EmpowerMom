@@ -223,4 +223,14 @@ class MessageRepository @Inject constructor(
             isResonated = isResonated
         )
     }
+
+    /**
+     * 从远程拉取最新数据。
+     * TODO(Dev C): 等后端接口就绪后接入真实请求
+     */
+    suspend fun refreshFromRemote() {
+        // 暂时模拟网络延迟,让下拉刷新动画能看到
+        kotlinx.coroutines.delay(800)
+        // 真实实现:remoteApi.fetchLatest() → 写入 Room
+    }
 }

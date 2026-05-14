@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.empowermom.app.feature.messageboard.viewmodel.MessageDetailViewModel
+import androidx.compose.foundation.layout.imePadding
 
 /**
  * 留言详情页
@@ -32,6 +33,9 @@ fun MessageDetailScreen(
     }
 
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text("详情", style = MaterialTheme.typography.headlineSmall) },

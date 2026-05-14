@@ -22,6 +22,7 @@ data class MessageBoardUiState(
     val selectedCategory: MessageCategory? = null,  // null = 全部
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val isRefreshing: Boolean = false,
     // 写留言编辑器状态
     val isEditorOpen: Boolean = false,
     val editorState: EditorState = EditorState()
@@ -54,6 +55,8 @@ sealed class MessageBoardIntent {
     data object SubmitMessage : MessageBoardIntent()
     data class ToggleLike(val messageId: Long) : MessageBoardIntent()
     data class ToggleResonance(val messageId: Long) : MessageBoardIntent()
+    data object Retry : MessageBoardIntent()
+    data object Refresh : MessageBoardIntent()
 }
 
 // ── ViewModel ──────────────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ class MessageBoardViewModel @Inject constructor(
                         _uiState.update { it.copy(errorMessage = e.message, isLoading = false) }
                     }
                     .collect { messages ->
-                        _uiState.update { it.copy(messages = messages, isLoading = false) }
+                        _uiState.update { it.copy(messages = messages, isLoading = false, selectedCategory = category) }
                     }
             }
         }
@@ -108,6 +111,8 @@ class MessageBoardViewModel @Inject constructor(
             is MessageBoardIntent.SubmitMessage -> submitMessage()
             is MessageBoardIntent.ToggleLike -> toggleLike(intent.messageId)
             is MessageBoardIntent.ToggleResonance -> toggleResonance(intent.messageId)
+            is MessageBoardIntent.Retry -> retry()
+            is MessageBoardIntent.Refresh -> refresh()
         }
     }
 
@@ -287,6 +292,46 @@ class MessageBoardViewModel @Inject constructor(
             try {
                 repository.toggleResonance(messageId)
             } catch (e: Exception) { /* 静默失败 */ }
+        }
+    }
+
+    private fun retry() {
+        Log.d("MessageBoard", "用户点击重试")
+        _uiState.update { it.copy(errorMessage = null, isLoading = true) }
+        // 重新触发当前分类的 Flow 订阅
+        val current = selectedCategory.value
+        selectedCategory.value = current  // 触发 collectLatest 重新订阅
+    }
+
+    private fun refresh() {
+        Log.d("MessageBoard", "下拉刷新触发")
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            try {
+                repository.refreshFromRemote()
+            } catch (e: Exception) {
+                Log.e("MessageBoard", "刷新失败: ${e.message}")
+                // 刷新失败不弹错态，静默失败即可，本地数据还在
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
+        }
+    }
+
+    // 临时调试代码,验证完删除
+    fun debugInsertMockData() {
+        viewModelScope.launch {
+            val categories = MessageCategory.entries
+            repeat(100) { i ->
+                repository.postMessage(
+                    content = "这是第 $i 条测试留言，用来测滚动性能。今天宝宝又闹腾了一晚上，我感觉自己快撑不住了。",
+                    category = categories[i % categories.size],
+                    tags = listOf("睡眠不足"),
+                    author = "测试妈妈$i",
+                    isAnonymous = false
+                )
+            }
+            Log.d("MessageBoard", "插入 100 条测试数据完成")
         }
     }
 }

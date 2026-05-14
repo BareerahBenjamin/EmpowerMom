@@ -30,6 +30,8 @@ import com.empowermom.app.feature.messageboard.viewmodel.MessageBoardIntent
 import com.empowermom.app.feature.messageboard.viewmodel.MessageBoardViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 留言板主屏幕
@@ -47,6 +49,12 @@ fun MessageBoardScreen(
     LaunchedEffect(Unit) {
         viewModel.navigateToDetail.collectLatest { messageId ->
             onNavigateToDetail(messageId)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (uiState.messages.isEmpty() && !uiState.isLoading) {
+            viewModel.debugInsertMockData()
         }
     }
 
@@ -78,49 +86,60 @@ fun MessageBoardScreen(
                     )
                 }
 
-                uiState.messages.isEmpty() -> {
+                uiState.errorMessage != null -> {
+                    ErrorState(
+                        errorMessage = uiState.errorMessage!!,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(paddingValues),
+                        onRetry = { viewModel.handleIntent(MessageBoardIntent.Retry) }
+                    )
+                }
+
+                uiState.messages.isEmpty() && !uiState.isLoading -> {
                     EmptyState(
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .padding(paddingValues)
+                            .padding(paddingValues),
+                        onWriteClick = { viewModel.handleIntent(MessageBoardIntent.OpenEditor) }
                     )
                 }
 
                 else -> {
-                    // ── 留言列表 ────────────────────────────────────────────────
-                    LazyColumn(
+                    PullToRefreshBox(
+                        isRefreshing = uiState.isRefreshing,
+                        onRefresh = { viewModel.handleIntent(MessageBoardIntent.Refresh) },
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(paddingValues),
-                        contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 24.dp,
-                            bottom = 8.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(paddingValues)
                     ) {
-                        // 标题区域
-                        item {
-                            BoardHeader()
-                        }
-
-                        // 留言卡片列表
-                        items(
-                            items = uiState.messages,
-                            key = { it.id }
-                        ) { message ->
-                            MessageCard(
-                                message = message,
-                                onLikeClick = {
-                                    viewModel.handleIntent(MessageBoardIntent.ToggleLike(message.id))
-                                },
-                                onResonanceClick = {
-                                    viewModel.handleIntent(MessageBoardIntent.ToggleResonance(message.id))
-                                },
-                                onReplyClick = { onNavigateToDetail(message.id) },
-                                onCardClick = { onNavigateToDetail(message.id) }
-                            )
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 24.dp,
+                                bottom = 8.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            item { BoardHeader() }
+                            items(
+                                items = uiState.messages,
+                                key = { it.id }
+                            ) { message ->
+                                MessageCard(
+                                    message = message,
+                                    onLikeClick = {
+                                        viewModel.handleIntent(MessageBoardIntent.ToggleLike(message.id))
+                                    },
+                                    onResonanceClick = {
+                                        viewModel.handleIntent(MessageBoardIntent.ToggleResonance(message.id))
+                                    },
+                                    onReplyClick = { onNavigateToDetail(message.id) },
+                                    onCardClick = { onNavigateToDetail(message.id) }
+                                )
+                            }
                         }
                     }
                 }
@@ -582,28 +601,101 @@ private fun WriteMessageBottomBar(onClick: () -> Unit) {
 }
 
 @Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
+private fun EmptyState(
+    modifier: Modifier = Modifier,
+    onWriteClick: () -> Unit = {}
+) {
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = Icons.Outlined.ChatBubbleOutline,
             contentDescription = null,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.outline
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "还没有留言",
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.secondary
+            color = MaterialTheme.colorScheme.onBackground
         )
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "来做第一个分享心情的人吧",
+            text = "写下第一条吧，让其他妈妈感受到你",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.secondary
         )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onWriteClick,
+            shape = MaterialTheme.shapes.medium,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Edit,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("写下第一条", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun ErrorState(
+    errorMessage: String,
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.ErrorOutline,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.error
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "加载失败",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = errorMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        OutlinedButton(
+            onClick = onRetry,
+            shape = MaterialTheme.shapes.medium,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp, MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "重试",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
