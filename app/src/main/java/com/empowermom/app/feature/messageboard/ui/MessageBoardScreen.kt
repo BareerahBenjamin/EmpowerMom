@@ -32,6 +32,12 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 留言板主屏幕
@@ -49,12 +55,6 @@ fun MessageBoardScreen(
     LaunchedEffect(Unit) {
         viewModel.navigateToDetail.collectLatest { messageId ->
             onNavigateToDetail(messageId)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        if (uiState.messages.isEmpty() && !uiState.isLoading) {
-            viewModel.debugInsertMockData()
         }
     }
 
@@ -199,15 +199,26 @@ private fun MessageBoardTopBar(
                         .border(1.dp, MaterialTheme.colorScheme.primary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.FavoriteBorder,
-                        contentDescription = "暖心留言板",
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        EmpowerMomColors.Peach,
+                                        EmpowerMomColors.Rose
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "🌷", fontSize = 18.sp)
+                    }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "暖心留言板",
+                    text = "EmpowerMom",
                     style = MaterialTheme.typography.headlineSmall
                 )
             }
@@ -304,11 +315,14 @@ fun MessageCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = MaterialTheme.shapes.medium,
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(
             width = if (message.isCrisis) 2.dp else 0.5.dp,
-            color = borderColor
-        )
+            color = if (message.isCrisis)
+                EmpowerMomColors.CrisisRed
+            else
+                MaterialTheme.colorScheme.outline
+        ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
 
@@ -497,8 +511,22 @@ private fun AiResponseBlock(response: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(12.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        EmpowerMomColors.AmberPale,
+                        EmpowerMomColors.PeachPale
+                    )
+                )
+            )
+            .drawBehind {
+                drawRect(
+                    color = EmpowerMomColors.Amber,
+                    size = Size(3.dp.toPx(), size.height)
+                )
+            }
+            .padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -578,27 +606,24 @@ private fun WriteMessageBottomBar(onClick: () -> Unit) {
         Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Button(
                 onClick = onClick,
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                    containerColor = EmpowerMomColors.Peach
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "写心事",
+                    text = "✏️  写心事",
+                    color = Color.White,
                     style = MaterialTheme.typography.labelLarge
                 )
-            }
-        }
-    }
-}
+            }           // ← Button 闭合
+        }               // ← Box(padding) 闭合
+    }                   // ← Column 闭合
+}                       // ← WriteMessageBottomBar 闭合
 
 @Composable
 private fun EmptyState(

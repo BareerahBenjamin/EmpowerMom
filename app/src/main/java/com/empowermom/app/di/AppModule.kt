@@ -20,6 +20,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import com.empowermom.app.core.data.local.dao.DailyLogDao
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -40,6 +41,9 @@ object DatabaseModule {
     @Provides fun provideMessageDao(db: AppDatabase): MessageDao = db.messageDao()
     @Provides fun provideReplyDao(db: AppDatabase): ReplyDao = db.replyDao()
     @Provides fun provideUserInteractionDao(db: AppDatabase): UserInteractionDao = db.userInteractionDao()
+
+    @Provides
+    fun provideDailyLogDao(db: AppDatabase): DailyLogDao = db.dailyLogDao()
 }
 
 @Module

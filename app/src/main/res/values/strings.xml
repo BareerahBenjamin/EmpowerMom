@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">暖心留言板</string>
+    <string name="app_name">EmpowerMom</string>
     <string name="tab_all">全部</string>
     <string name="tab_emotion">情绪树洞</string>
     <string name="tab_parenting">育儿求助</string>

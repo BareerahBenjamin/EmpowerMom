@@ -6,6 +6,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 // 字体：极简风格，对应 HTML 的 font-light / font-weight: 300
 val EmpowerMomTypography = Typography(
@@ -70,9 +71,9 @@ val EmpowerMomTypography = Typography(
 
 // 形状：方形为主（对应 HTML 的 rounded-none 风格）
 val EmpowerMomShapes = Shapes(
-    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
-    small = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
-    medium = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
-    large = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
-    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(0.dp),
+    extraSmall = RoundedCornerShape(8.dp),   // 标签、小芯片
+    small      = RoundedCornerShape(12.dp),  // 输入框、小卡片
+    medium     = RoundedCornerShape(16.dp),  // 留言卡片、底部弹层
+    large      = RoundedCornerShape(20.dp),  // 底部弹层顶部圆角
+    extraLarge = RoundedCornerShape(24.dp),  // Banner
 )

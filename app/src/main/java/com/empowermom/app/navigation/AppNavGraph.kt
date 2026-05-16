@@ -1,6 +1,7 @@
 package com.empowermom.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -10,15 +11,18 @@ import com.empowermom.app.feature.dailylog.ui.DailyLogScreen
 import com.empowermom.app.feature.family.ui.FamilyScreen
 import com.empowermom.app.feature.messageboard.ui.MessageBoardScreen
 import com.empowermom.app.feature.messageboard.ui.MessageDetailScreen
+import com.empowermom.app.feature.profile.ui.ProfileScreen
 import com.empowermom.app.feature.sandbox.ui.SandboxScreen
 
 @Composable
 fun AppNavGraph(
-    navController: NavHostController
+    navController: NavHostController,
+    modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.MessageBoard.route
+        startDestination = Screen.MessageBoard.route,
+        modifier = modifier
     ) {
         // ── 留言板 ────────────────────────────────────────────────────────────
         composable(Screen.MessageBoard.route) {
@@ -50,7 +54,12 @@ fun AppNavGraph(
             DailyLogScreen()
         }
 
-        // ── 家庭协同 ───────────────────────────────────────────────────────────
+        // ── 我的（个人资料 / 登录）────────────────────────────────────────────
+        composable(Screen.Profile.route) {
+            ProfileScreen()
+        }
+
+        // ── 家庭协同（P2 占位）────────────────────────────────────────────────
         composable(Screen.Family.route) {
             FamilyScreen()
         }
