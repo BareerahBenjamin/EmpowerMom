@@ -55,8 +55,9 @@
 - 两边：都有点赞/共鸣切换、回复发送（含发送中与失败提示）、以及 AI 回应生成并写回数据库的流程。
 - 本地：AI 回应链路与“附件/私密/危机跳转详情”等逻辑结合更紧（整体功能更完整）。
 
-## 风险点（合并前建议优先处理）
-- 本地 `Message.kt` 末尾存在残留 `*/`，可能造成 Kotlin 语法/编译问题。
+### 10) 数据库与 AI 模板（额外改动）
+- 数据库：`AppDatabase` 的版本从 `2` 升级到 `4`（用于承接你本地项目中的数据库结构演进）。
+- AI 模板：`PromptTemplates` 调整为更贴近产品设定的“星芽”口吻，并匹配当前留言板分区枚举（情绪树洞/妈妈互助/家庭关系）。
 
 ## 所有改动过的文件（留言板功能相关）
 
@@ -68,10 +69,10 @@
 - `app/src/main/java/com/empowermom/app/feature/messageboard/viewmodel/MessageBoardViewModel.kt`
 - `app/src/main/java/com/empowermom/app/feature/messageboard/viewmodel/MessageDetailViewModel.kt`
 
-留言板依赖的数据层/导航：
+留言板依赖的数据层/全局配置：
 - `app/src/main/java/com/empowermom/app/core/data/local/dao/MessageDao.kt`
 - `app/src/main/java/com/empowermom/app/core/data/local/entity/MessageEntity.kt`
 - `app/src/main/java/com/empowermom/app/core/data/repository/MessageRepository.kt`
-- `app/src/main/java/com/empowermom/app/navigation/Screen.kt`
-- `app/src/main/java/com/empowermom/app/navigation/AppNavGraph.kt`
-
+- `app/src/main/java/com/empowermom/app/core/data/local/AppDatabase.kt`
+- `app/src/main/java/com/empowermom/app/core/network/PromptTemplates.kt`
+- `message_change.md`

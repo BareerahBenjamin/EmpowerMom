@@ -19,7 +19,7 @@ import com.empowermom.app.core.data.local.entity.UserInteractionEntity
         UserInteractionEntity::class,
         DailyLogEntity::class,          // ← 新增
     ],
-    version = 2,                        // ← 从 1 升到 2
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,3 +33,33 @@ abstract class AppDatabase : RoomDatabase() {
         const val DATABASE_NAME = "empowermom.db"
     }
 }
+
+/*
+==================== 原有内容（保留，勿删）====================
+
+@Database(
+    entities = [
+        MessageEntity::class,
+        ReplyEntity::class,
+        UserInteractionEntity::class,
+        DailyLogEntity::class,          // ← 新增
+    ],
+    version = 2,                        // ← 从 1 升到 2
+    exportSchema = true
+)
+*/
+
+/*
+==================== 原有内容（保留，勿删）- version 3 ====================
+
+@Database(
+    entities = [
+        MessageEntity::class,
+        ReplyEntity::class,
+        UserInteractionEntity::class,
+        DailyLogEntity::class,
+    ],
+    version = 3,
+    exportSchema = true
+)
+*/
