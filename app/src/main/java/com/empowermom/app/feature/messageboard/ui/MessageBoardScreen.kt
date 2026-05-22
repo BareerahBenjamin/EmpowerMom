@@ -27,7 +27,9 @@ import com.empowermom.app.core.ui.theme.EmpowerMomColors
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
 import com.empowermom.app.feature.messageboard.viewmodel.MessageBoardIntent
+import com.empowermom.app.feature.messageboard.viewmodel.MessageBoardTab
 import com.empowermom.app.feature.messageboard.viewmodel.MessageBoardViewModel
+import com.empowermom.app.feature.profile.model.UserProfile
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -38,7 +40,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
-
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
+import com.empowermom.app.feature.messageboard.model.MediaKind
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
+import com.empowermom.app.core.ui.theme.EmpowerMomTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.empowermom.app.R
+import kotlin.math.roundToInt
 // ─────────────────────────────────────────────────────────────────────────────
 // 留言板主屏幕
 // 对应 HTML: header + main + footer 结构
@@ -51,6 +67,7 @@ fun MessageBoardScreen(
     viewModel: MessageBoardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
     // 监听跳转事件：危机帖发布后自动跳转到详情页
     LaunchedEffect(Unit) {
         viewModel.navigateToDetail.collectLatest { messageId ->
@@ -58,14 +75,22 @@ fun MessageBoardScreen(
         }
     }
 
+    if (uiState.isSearchOpen) {
+        MessageSearchDialog(
+            query = uiState.searchQuery,
+            onQueryChange = { viewModel.handleIntent(MessageBoardIntent.UpdateSearchQuery(it)) },
+            onSearch = { viewModel.handleIntent(MessageBoardIntent.ExecuteSearch) },
+            onDismiss = { viewModel.handleIntent(MessageBoardIntent.CloseSearch) }
+        )
+    }
+
     Scaffold(
         // ── 顶部导航栏 ──────────────────────────────────────────────────────────
         topBar = {
             MessageBoardTopBar(
-                selectedCategory = uiState.selectedCategory,
-                onCategorySelected = { category ->
-                    viewModel.handleIntent(MessageBoardIntent.SelectCategory(category))
-                }
+                selectedTab = uiState.selectedTab,
+                onTabSelected = { tab -> viewModel.handleIntent(MessageBoardIntent.SelectTab(tab)) },
+                onSearchClick = { viewModel.handleIntent(MessageBoardIntent.OpenSearch) }
             )
         },
         // ── 底部「写心事」按钮 ────────────────────────────────────────────────
@@ -76,6 +101,17 @@ fun MessageBoardScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
+
+        if (uiState.isSearchResultOpen) {
+            SearchResultScreen(
+                query = uiState.searchQuery,
+                results = uiState.searchResults,
+                onBack = { viewModel.handleIntent(MessageBoardIntent.CloseSearchResult) },
+                onNavigateToDetail = onNavigateToDetail,
+                userProfile = userProfile
+            )
+            return@Scaffold
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             when {
@@ -118,18 +154,19 @@ fun MessageBoardScreen(
                             contentPadding = PaddingValues(
                                 start = 16.dp,
                                 end = 16.dp,
-                                top = 24.dp,
+                                top = 12.dp,
                                 bottom = 8.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            item { BoardHeader() }
+                            // item { BoardHeader() }
                             items(
                                 items = uiState.messages,
                                 key = { it.id }
                             ) { message ->
                                 MessageCard(
                                     message = message,
+                                    userProfile = userProfile,
                                     onLikeClick = {
                                         viewModel.handleIntent(MessageBoardIntent.ToggleLike(message.id))
                                     },
@@ -156,6 +193,13 @@ fun MessageBoardScreen(
             onCategorySelect = { viewModel.handleIntent(MessageBoardIntent.SelectEditorCategory(it)) },
             onTagToggle = { viewModel.handleIntent(MessageBoardIntent.ToggleTag(it)) },
             onAnonymousChange = { viewModel.handleIntent(MessageBoardIntent.SetAnonymous(it)) },
+            onPrivateOnlyChange = { viewModel.handleIntent(MessageBoardIntent.SetPrivateOnly(it)) },
+            onAddAttachment = { uri, mimeType ->
+                viewModel.handleIntent(MessageBoardIntent.AddAttachment(uri, mimeType))
+            },
+            onRemoveAttachment = { uri ->
+                viewModel.handleIntent(MessageBoardIntent.RemoveAttachment(uri))
+            },
             onNicknameChange = { viewModel.handleIntent(MessageBoardIntent.UpdateNickname(it)) },
             onSubmit = { viewModel.handleIntent(MessageBoardIntent.SubmitMessage) }
         )
@@ -165,6 +209,232 @@ fun MessageBoardScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 // 顶部导航栏：Logo + 分类 Tab（对应 HTML header）
 // ─────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MessageBoardTopBar(
+    selectedTab: MessageBoardTab,
+    onTabSelected: (MessageBoardTab) -> Unit,
+    onSearchClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .border(
+                width = 0.dp,
+                color = Color.Transparent,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(0.dp)
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onSearchClick) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = "搜索",
+                    tint = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+
+        // 分类 Tab 行（对应 HTML 的 nav tabs）
+        ScrollableTabRow(
+            selectedTabIndex = when (selectedTab) {
+                MessageBoardTab.All -> 0
+                MessageBoardTab.Private -> 1
+                is MessageBoardTab.Category -> selectedTab.category.ordinal + 2
+            },
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary,
+            edgePadding = 8.dp,
+            divider = {},
+            indicator = {}
+        ) {
+            val tabShape = RoundedCornerShape(14.dp)
+            // "全部" Tab
+            Tab(
+                selected = selectedTab is MessageBoardTab.All,
+                onClick = { onTabSelected(MessageBoardTab.All) },
+                modifier = Modifier
+                    .clip(tabShape)
+                    .background(if (selectedTab is MessageBoardTab.All) EmpowerMomColors.PeachPale else Color.Transparent)
+                    .border(
+                        width = if (selectedTab is MessageBoardTab.All) 0.5.dp else 0.dp,
+                        color = if (selectedTab is MessageBoardTab.All) EmpowerMomColors.Rose else Color.Transparent,
+                        shape = tabShape
+                    ),
+                selectedContentColor = EmpowerMomColors.RoseDark,
+                unselectedContentColor = MaterialTheme.colorScheme.secondary,
+                text = {
+                    Text(
+                        "全部",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            )
+
+            Tab(
+                selected = selectedTab is MessageBoardTab.Private,
+                onClick = { onTabSelected(MessageBoardTab.Private) },
+                modifier = Modifier
+                    .clip(tabShape)
+                    .background(if (selectedTab is MessageBoardTab.Private) EmpowerMomColors.PeachPale else Color.Transparent)
+                    .border(
+                        width = if (selectedTab is MessageBoardTab.Private) 0.5.dp else 0.dp,
+                        color = if (selectedTab is MessageBoardTab.Private) EmpowerMomColors.Rose else Color.Transparent,
+                        shape = tabShape
+                    ),
+                selectedContentColor = EmpowerMomColors.RoseDark,
+                unselectedContentColor = MaterialTheme.colorScheme.secondary,
+                text = { Text("私密", style = MaterialTheme.typography.bodySmall) }
+            )
+
+            // 各分类 Tab
+            MessageCategory.entries.forEach { category ->
+                val isSelected = selectedTab is MessageBoardTab.Category && selectedTab.category == category
+                Tab(
+                    selected = isSelected,
+                    onClick = { onTabSelected(MessageBoardTab.Category(category)) },
+                    modifier = Modifier
+                        .clip(tabShape)
+                        .background(if (isSelected) EmpowerMomColors.PeachPale else Color.Transparent)
+                        .border(
+                            width = if (isSelected) 0.5.dp else 0.dp,
+                            color = if (isSelected) EmpowerMomColors.Rose else Color.Transparent,
+                            shape = tabShape
+                        ),
+                    selectedContentColor = EmpowerMomColors.RoseDark,
+                    unselectedContentColor = MaterialTheme.colorScheme.secondary,
+                    text = {
+                        Text(
+                            category.displayName,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                )
+            }
+        }
+
+        HorizontalDivider(
+            color = Color.Transparent,
+            thickness = 0.dp
+        )
+    }
+}
+
+@Composable
+private fun MessageSearchDialog(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.activity.compose.BackHandler(enabled = true) {
+        onDismiss()
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = "搜索留言", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("输入关键词…", style = MaterialTheme.typography.bodySmall) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSearch() })
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onSearch) { Text("搜索") }
+                    TextButton(onClick = onDismiss) { Text("取消") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SearchResultScreen(
+    query: String,
+    results: List<Message>,
+    onBack: () -> Unit,
+    onNavigateToDetail: (Long) -> Unit,
+    userProfile: UserProfile
+) {
+    androidx.activity.compose.BackHandler(enabled = true) {
+        onBack()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("搜索：$query") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Outlined.ArrowBackIosNew, contentDescription = "返回")
+                    }
+                }
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
+        if (results.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "没有找到相关留言",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(items = results, key = { it.id }) { message ->
+                    MessageCard(
+                        message = message,
+                        userProfile = userProfile,
+                        onLikeClick = {},
+                        onResonanceClick = {},
+                        onReplyClick = { onNavigateToDetail(message.id) },
+                        onCardClick = { onNavigateToDetail(message.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/*
+==================== 原有内容（保留，勿删）====================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -228,48 +498,9 @@ private fun MessageBoardTopBar(
                 tint = MaterialTheme.colorScheme.secondary
             )
         }
-
-        // 分类 Tab 行（对应 HTML 的 nav tabs）
-        ScrollableTabRow(
-            selectedTabIndex = selectedCategory?.ordinal?.plus(1) ?: 0,
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.primary,
-            edgePadding = 16.dp,
-            divider = {}
-        ) {
-            // "全部" Tab
-            Tab(
-                selected = selectedCategory == null,
-                onClick = { onCategorySelected(null) },
-                text = {
-                    Text(
-                        "全部",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            )
-            // 各分类 Tab
-            MessageCategory.entries.forEach { category ->
-                Tab(
-                    selected = selectedCategory == category,
-                    onClick = { onCategorySelected(category) },
-                    text = {
-                        Text(
-                            category.displayName,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                )
-            }
-        }
-
-        // 分隔线
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outline,
-            thickness = 0.5.dp
-        )
     }
 }
+*/
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 标题区（对应 HTML 的 "妈妈们的分享" 标题区域）
@@ -299,6 +530,7 @@ private fun BoardHeader() {
 @Composable
 fun MessageCard(
     message: Message,
+    userProfile: UserProfile,
     onLikeClick: () -> Unit,
     onResonanceClick: () -> Unit,
     onReplyClick: () -> Unit,
@@ -338,15 +570,31 @@ fun MessageCard(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(
+                                if (message.isAnonymous) EmpowerMomColors.PeachPale
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            .border(
+                                width = if (message.isAnonymous) 1.dp else 0.dp,
+                                color = if (message.isAnonymous) EmpowerMomColors.Rose else Color.Transparent,
+                                shape = CircleShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
+                        if (message.isAnonymous) {
+                            Text(text = "🦖", fontSize = 16.sp)
+                        } else {
+                            if (message.author == userProfile.nickname && userProfile.avatarEmoji.isNotBlank()) {
+                                Text(text = userProfile.avatarEmoji, fontSize = 16.sp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Outlined.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
@@ -385,6 +633,44 @@ fun MessageCard(
                 maxLines = 5,
                 overflow = TextOverflow.Ellipsis
             )
+
+            if (message.attachments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
+                    message.attachments.take(6).forEach { attachment ->
+                        val shape = RoundedCornerShape(12.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(shape)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outline, shape)
+                        ) {
+                            when (attachment.kind) {
+                                MediaKind.Image -> AsyncImage(
+                                    model = attachment.uri,
+                                    contentDescription = "图片",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                MediaKind.Video -> Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(EmpowerMomColors.AmberPale),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = "视频",
+                                        tint = EmpowerMomColors.Rose
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // ── 标签列表 ──────────────────────────────────────────────────────
             if (message.tags.isNotEmpty()) {
@@ -452,7 +738,7 @@ fun MessageCard(
             // — AI 回应区块（对应 HTML 的灰色背景区）-
             // 不再判断 aiResponse 是否为空——空时显示 Loading 态，避免空白
             Spacer(modifier = Modifier.height(12.dp))
-            AiResponseBlock(response = message.aiResponse)
+            XingyaReplyBlock(message = message)
 
             // ── 危机干预提示 ──────────────────────────────────────────────────
             if (message.isCrisis) {
@@ -491,6 +777,175 @@ private fun InteractionButton(
         )
     }
 }
+
+@Composable
+private fun XingyaReplyBlock(
+    message: Message
+) {
+    val messageId = message.id
+    val hasResponse = message.aiResponse.isNotBlank()
+    val avatarResId = R.drawable.ic_xingya_avatar
+
+    var avatarVisible by remember(messageId) { mutableStateOf(hasResponse) }
+    var textVisible by remember(messageId) { mutableStateOf(hasResponse) }
+    var lastHadResponse by remember(messageId) { mutableStateOf(hasResponse) }
+
+    val haloColor = remember(messageId) { Animatable(EmpowerMomColors.Peach) }
+
+    LaunchedEffect(messageId) {
+        if (!hasResponse) {
+            avatarVisible = false
+            textVisible = false
+            avatarVisible = true
+        }
+    }
+
+    LaunchedEffect(messageId, hasResponse) {
+        if (!lastHadResponse && hasResponse) {
+            haloColor.snapTo(EmpowerMomColors.Peach)
+            haloColor.animateTo(
+                targetValue = EmpowerMomColors.Amber,
+                animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+            )
+            haloColor.animateTo(
+                targetValue = EmpowerMomColors.Peach,
+                animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+            )
+            kotlinx.coroutines.delay(300)
+            textVisible = true
+        } else if (hasResponse) {
+            textVisible = true
+        }
+        lastHadResponse = hasResponse
+    }
+
+    val displayedText = when {
+        !hasResponse -> ""
+        message.isPrivateOnly -> "这里只有你和我。\n${message.aiResponse}"
+        else -> message.aiResponse
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = avatarVisible,
+            enter = fadeIn(animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(
+                        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+                        initialOffsetX = { fullWidth -> (fullWidth * 0.25f).roundToInt() }
+                    )
+        ) {
+            XingyaAvatar(
+                haloColor = haloColor.value,
+                avatarResId = avatarResId
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "星芽",
+                style = MaterialTheme.typography.titleSmall,
+                color = EmpowerMomColors.TextMid
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val bubbleShape = RoundedCornerShape(12.dp)
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = bubbleShape,
+                            ambientColor = EmpowerMomColors.Peach.copy(alpha = 0.15f),
+                            spotColor = EmpowerMomColors.Peach.copy(alpha = 0.15f)
+                        )
+                        .background(EmpowerMomColors.AmberPale, bubbleShape)
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    if (!hasResponse) {
+                        Text(
+                            text = "…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmpowerMomColors.TextMid
+                        )
+                    } else {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = textVisible,
+                            enter = fadeIn(animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+                                        initialOffsetY = { fullHeight -> (fullHeight * 0.25f).roundToInt() }
+                                    )
+                        ) {
+                            Text(
+                                text = displayedText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = EmpowerMomColors.TextDark
+                            )
+                        }
+                    }
+                }
+
+                if (message.isPrivateOnly && message.isCrisis && hasResponse) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(EmpowerMomColors.CrisisBg)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "心理援助热线：400-161-9995",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmpowerMomColors.CrisisRed
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun XingyaAvatar(
+    haloColor: Color,
+    avatarResId: Int
+) {
+    Box(
+        modifier = Modifier.size(36.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(CircleShape)
+                .background(haloColor.copy(alpha = 0.40f))
+        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(EmpowerMomColors.Peach),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.foundation.Image(
+                painter = painterResource(id = avatarResId),
+                contentDescription = "星芽",
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+        }
+    }
+}
+
+/*
+==================== 原有内容（保留，勿删）- AiResponseBlock（旧版 AI 标签样式）====================
 
 @Composable
 private fun AiResponseBlock(response: String) {
@@ -552,7 +1007,6 @@ private fun AiResponseBlock(response: String) {
         Spacer(modifier = Modifier.height(6.dp))
 
         if (isLoading) {
-            // Loading 态：温柔的等待文案 + 呼吸动画
             Text(
                 text = "AI 正在认真思考你的话……",
                 style = MaterialTheme.typography.bodySmall,
@@ -560,7 +1014,6 @@ private fun AiResponseBlock(response: String) {
                 modifier = Modifier.alpha(alpha)
             )
         } else {
-            // 已有回应：显示真实内容
             Text(
                 text = response,
                 style = MaterialTheme.typography.bodySmall,
@@ -569,6 +1022,7 @@ private fun AiResponseBlock(response: String) {
         }
     }
 }
+*/
 
 @Composable
 private fun CrisisInterventionBlock() {
@@ -602,12 +1056,17 @@ private fun WriteMessageBottomBar(onClick: () -> Unit) {
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
-        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        HorizontalDivider(color = Color.Transparent, thickness = 0.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Button(
                 onClick = onClick,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .width(220.dp)
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -652,25 +1111,36 @@ private fun EmptyState(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.secondary
         )
-        Spacer(modifier = Modifier.height(20.dp))
-        Button(
-            onClick = onWriteClick,
-            shape = MaterialTheme.shapes.medium,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Edit,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("写下第一条", style = MaterialTheme.typography.labelLarge)
-        }
     }
 }
+
+/*
+==================== 原有内容（保留，勿删）- BoardHeader 插入旧逻辑 ====================
+
+// item { BoardHeader() }
+*/
+
+/*
+==================== 原有内容（保留，勿删）- EmptyState「写下第一条」按钮 ====================
+
+// Spacer(modifier = Modifier.height(20.dp))
+// Button(
+//     onClick = onWriteClick,
+//     shape = MaterialTheme.shapes.medium,
+//     colors = ButtonDefaults.buttonColors(
+//         containerColor = MaterialTheme.colorScheme.primary,
+//         contentColor = MaterialTheme.colorScheme.onPrimary
+//     )
+// ) {
+//     Icon(
+//         imageVector = Icons.Outlined.Edit,
+//         contentDescription = null,
+//         modifier = Modifier.size(16.dp)
+//     )
+//     Spacer(modifier = Modifier.width(8.dp))
+//     Text("写下第一条", style = MaterialTheme.typography.labelLarge)
+// }
+*/
 
 @Composable
 private fun ErrorState(
@@ -737,5 +1207,106 @@ fun formatRelativeTime(date: Date): String {
         diff < 86_400_000L -> "${diff / 3_600_000}小时前"
         diff < 7 * 86_400_000L -> "${diff / 86_400_000}天前"
         else -> SimpleDateFormat("MM-dd", Locale.CHINA).format(date)
+    }
+}
+
+/*
+==================== 原有内容（保留，勿删）- 留言卡片旧头像 ====================
+
+// Box(
+//     modifier = Modifier
+//         .size(36.dp)
+//         .clip(CircleShape)
+//         .background(MaterialTheme.colorScheme.surfaceVariant),
+//     contentAlignment = Alignment.Center
+// ) {
+//     Icon(
+//         imageVector = Icons.Outlined.Person,
+//         contentDescription = null,
+//         modifier = Modifier.size(18.dp),
+//         tint = MaterialTheme.colorScheme.secondary
+//     )
+// }
+*/
+
+/*
+==================== 原有内容（保留，勿删）- 底部写心事按钮全宽旧实现 ====================
+
+// Button(
+//     onClick = onClick,
+//     modifier = Modifier
+//         .fillMaxWidth()
+//         .height(52.dp),
+//     shape = RoundedCornerShape(12.dp),
+//     colors = ButtonDefaults.buttonColors(
+//         containerColor = EmpowerMomColors.Peach
+//     ),
+//     contentPadding = PaddingValues(horizontal = 16.dp)
+// ) { ... }
+*/
+
+@Preview(showBackground = true, backgroundColor = 0xFFFDF6EE, widthDp = 390)
+@Composable
+private fun PreviewMessageBoardTopBarAndCards() {
+    EmpowerMomTheme {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            MessageBoardTopBar(
+                selectedTab = MessageBoardTab.Category(MessageCategory.EMOTION),
+                onTabSelected = {},
+                onSearchClick = {}
+            )
+
+            val demoMessage = Message(
+                id = 1,
+                content = "今天真的好累，宝宝一直哭，我也快撑不住了……想找个人说说话。",
+                author = "momo",
+                category = MessageCategory.EMOTION,
+                isAnonymous = true,
+                attachments = listOf(
+                    com.empowermom.app.feature.messageboard.model.MediaAttachment(
+                        uri = "content://preview/image",
+                        kind = MediaKind.Image
+                    )
+                )
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(items = listOf(demoMessage, demoMessage.copy(id = 2, content = "有人也经历过吗？", attachments = emptyList()))) { msg ->
+                    MessageCard(
+                        message = msg,
+                        userProfile = UserProfile(nickname = "momo", avatarEmoji = "🌸", isLoggedIn = true),
+                        onLikeClick = {},
+                        onResonanceClick = {},
+                        onReplyClick = {},
+                        onCardClick = {}
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFFDF6EE, widthDp = 390, heightDp = 700)
+@Composable
+private fun PreviewSearchResultScreen() {
+    EmpowerMomTheme {
+        val demoMessage = Message(
+            id = 1,
+            content = "睡眠不足让我有点崩溃，但我在慢慢学着放过自己。",
+            author = "momo",
+            category = MessageCategory.MOM_HELP,
+            isAnonymous = true
+        )
+        SearchResultScreen(
+            query = "睡眠",
+            results = listOf(demoMessage, demoMessage.copy(id = 2, content = "睡不够真的会影响情绪。")),
+            onBack = {},
+            onNavigateToDetail = {},
+            userProfile = UserProfile(nickname = "momo", avatarEmoji = "🌸", isLoggedIn = true)
+        )
     }
 }

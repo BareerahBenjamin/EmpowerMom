@@ -1,18 +1,27 @@
 package com.empowermom.app.feature.messageboard.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.empowermom.app.feature.messageboard.viewmodel.MessageDetailViewModel
 import androidx.compose.foundation.layout.imePadding
+
+import androidx.compose.ui.res.painterResource
+import com.empowermom.app.R
 
 /**
  * 留言详情页
@@ -26,7 +35,9 @@ fun MessageDetailScreen(
     viewModel: MessageDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
     var replyText by remember { mutableStateOf("") }
+    val replyFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(messageId) {
         viewModel.loadMessage(messageId)
@@ -80,7 +91,9 @@ fun MessageDetailScreen(
                                 viewModel.clearReplyError()
                             }
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(replyFocusRequester),
                         placeholder = { Text("写下你的回复...") },
                         singleLine = true,
                         shape = MaterialTheme.shapes.small,
@@ -127,9 +140,10 @@ fun MessageDetailScreen(
                 item {
                     MessageCard(
                         message = message,
+                        userProfile = userProfile,
                         onLikeClick = { viewModel.toggleLike(messageId) },
                         onResonanceClick = { viewModel.toggleResonance(messageId) },
-                        onReplyClick = {},
+                        onReplyClick = { replyFocusRequester.requestFocus() },
                         onCardClick = {}
                     )
                 }
@@ -201,26 +215,61 @@ fun MessageDetailScreen(
 
 @Composable
 private fun ReplyItem(reply: com.empowermom.app.feature.messageboard.model.Reply) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(reply.author, style = MaterialTheme.typography.titleSmall)
-            Text(
-                formatRelativeTime(reply.timestamp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary
+        // 头像部分
+        if (reply.author.trim() == "星芽") {
+            Image(
+                painter = painterResource(id = R.drawable.ic_xingya_avatar),
+                contentDescription = "星芽头像",
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
             )
+        } else {
+            // 默认头像
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = "默认头像",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(reply.content, style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // 内容部分
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(reply.author, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    formatRelativeTime(reply.timestamp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(reply.content, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+        }
     }
 }
 

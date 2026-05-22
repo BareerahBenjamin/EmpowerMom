@@ -4,10 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.empowermom.app.core.data.repository.MessageRepository
 import com.empowermom.app.core.data.repository.DraftRepository
+import com.empowermom.app.core.data.repository.UserRepository
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
+import com.empowermom.app.feature.messageboard.model.MediaAttachment
+import com.empowermom.app.feature.messageboard.model.MediaKind
 import com.empowermom.app.feature.messageboard.model.PresetTags
 import com.empowermom.app.feature.messageboard.model.CrisisKeywords
+import com.empowermom.app.feature.profile.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.channels.BufferOverflow
@@ -19,10 +23,15 @@ import android.util.Log
 
 data class MessageBoardUiState(
     val messages: List<Message> = emptyList(),
-    val selectedCategory: MessageCategory? = null,  // null = 全部
+    val selectedTab: MessageBoardTab = MessageBoardTab.All,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val isRefreshing: Boolean = false,
+    // 搜索
+    val isSearchOpen: Boolean = false,
+    val searchQuery: String = "",
+    val isSearchResultOpen: Boolean = false,
+    val searchResults: List<Message> = emptyList(),
     // 写留言编辑器状态
     val isEditorOpen: Boolean = false,
     val editorState: EditorState = EditorState()
@@ -32,7 +41,9 @@ data class EditorState(
     val content: String = "",
     val selectedCategory: MessageCategory? = null,
     val selectedTags: List<String> = emptyList(),
+    val attachments: List<MediaAttachment> = emptyList(),
     val isAnonymous: Boolean = true,
+    val isPrivateOnly: Boolean = false,
     val nickname: String = "",
     val isSubmitting: Boolean = false,
     val submitError: String? = null
@@ -41,16 +52,30 @@ data class EditorState(
     val charCount: Int get() = content.length
 }
 
+sealed class MessageBoardTab {
+    data object All : MessageBoardTab()
+    data object Private : MessageBoardTab()
+    data class Category(val category: MessageCategory) : MessageBoardTab()
+}
+
 // ── Intent (用户意图) ──────────────────────────────────────────────────────────
 
 sealed class MessageBoardIntent {
-    data class SelectCategory(val category: MessageCategory?) : MessageBoardIntent()
+    data class SelectTab(val tab: MessageBoardTab) : MessageBoardIntent()
+    data object OpenSearch : MessageBoardIntent()
+    data object CloseSearch : MessageBoardIntent()
+    data class UpdateSearchQuery(val query: String) : MessageBoardIntent()
+    data object ExecuteSearch : MessageBoardIntent()
+    data object CloseSearchResult : MessageBoardIntent()
     data object OpenEditor : MessageBoardIntent()
     data object CloseEditor : MessageBoardIntent()
     data class UpdateEditorContent(val content: String) : MessageBoardIntent()
     data class SelectEditorCategory(val category: MessageCategory) : MessageBoardIntent()
     data class ToggleTag(val tag: String) : MessageBoardIntent()
+    data class AddAttachment(val uri: String, val mimeType: String?) : MessageBoardIntent()
+    data class RemoveAttachment(val uri: String) : MessageBoardIntent()
     data class SetAnonymous(val isAnonymous: Boolean) : MessageBoardIntent()
+    data class SetPrivateOnly(val isPrivateOnly: Boolean) : MessageBoardIntent()
     data class UpdateNickname(val nickname: String) : MessageBoardIntent()
     data object SubmitMessage : MessageBoardIntent()
     data class ToggleLike(val messageId: Long) : MessageBoardIntent()
@@ -64,11 +89,18 @@ sealed class MessageBoardIntent {
 @HiltViewModel
 class MessageBoardViewModel @Inject constructor(
     private val repository: MessageRepository,
-    private val draftRepository: DraftRepository
+    private val draftRepository: DraftRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessageBoardUiState(isLoading = true))
     val uiState: StateFlow<MessageBoardUiState> = _uiState.asStateFlow()
+
+    val userProfile: StateFlow<UserProfile> = userRepository.userProfile.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = UserProfile()
+    )
 
     // 危机帖发布后，发出跳转事件让 UI 跳转到详情页
     private val _navigateToDetail = MutableSharedFlow<Long>(
@@ -79,34 +111,68 @@ class MessageBoardViewModel @Inject constructor(
     val navigateToDetail: SharedFlow<Long> = _navigateToDetail.asSharedFlow()
 
     // 当前分类筛选
-    private val selectedCategory = MutableStateFlow<MessageCategory?>(null)
+    private val selectedTab = MutableStateFlow<MessageBoardTab>(MessageBoardTab.All)
+    private val searchQuery = MutableStateFlow("")
+    private val searchResultQuery = MutableStateFlow("")
 
     val presetTags = PresetTags.all
 
     init {
-        // 响应分类切换，重新订阅留言列表
+        // 响应 Tab 切换，重新订阅留言列表
         viewModelScope.launch {
-            selectedCategory.collectLatest { category ->
-                repository.observeMessages(category)
+            selectedTab.collectLatest { tab ->
+                val source = when (tab) {
+                    MessageBoardTab.All -> repository.observeMessages()
+                    MessageBoardTab.Private -> repository.observeMessages(privateOnly = true)
+                    is MessageBoardTab.Category -> repository.observeMessages(category = tab.category)
+                }
+                source
                     .catch { e ->
                         _uiState.update { it.copy(errorMessage = e.message, isLoading = false) }
                     }
                     .collect { messages ->
-                        _uiState.update { it.copy(messages = messages, isLoading = false, selectedCategory = category) }
+                        _uiState.update { it.copy(messages = messages, isLoading = false, selectedTab = tab) }
                     }
             }
+        }
+
+        // 搜索结果：只搜公开帖子（All）
+        viewModelScope.launch {
+            searchResultQuery
+                .flatMapLatest { query ->
+                    if (query.isBlank()) {
+                        flowOf(emptyList())
+                    } else {
+                        repository.observeMessages()
+                            .map { list -> list.filter { it.content.contains(query, ignoreCase = true) } }
+                    }
+                }
+                .catch { _ ->
+                    _uiState.update { it.copy(searchResults = emptyList()) }
+                }
+                .collect { results ->
+                    _uiState.update { it.copy(searchResults = results) }
+                }
         }
     }
 
     fun handleIntent(intent: MessageBoardIntent) {
         when (intent) {
-            is MessageBoardIntent.SelectCategory -> onSelectCategory(intent.category)
+            is MessageBoardIntent.SelectTab -> onSelectTab(intent.tab)
+            is MessageBoardIntent.OpenSearch -> openSearch()
+            is MessageBoardIntent.CloseSearch -> closeSearch()
+            is MessageBoardIntent.UpdateSearchQuery -> updateSearchQuery(intent.query)
+            is MessageBoardIntent.ExecuteSearch -> executeSearch()
+            is MessageBoardIntent.CloseSearchResult -> closeSearchResult()
             is MessageBoardIntent.OpenEditor -> openEditor()
             is MessageBoardIntent.CloseEditor -> closeEditor()
             is MessageBoardIntent.UpdateEditorContent -> updateContent(intent.content)
             is MessageBoardIntent.SelectEditorCategory -> selectEditorCategory(intent.category)
             is MessageBoardIntent.ToggleTag -> toggleTag(intent.tag)
+            is MessageBoardIntent.AddAttachment -> addAttachment(intent.uri, intent.mimeType)
+            is MessageBoardIntent.RemoveAttachment -> removeAttachment(intent.uri)
             is MessageBoardIntent.SetAnonymous -> setAnonymous(intent.isAnonymous)
+            is MessageBoardIntent.SetPrivateOnly -> setPrivateOnly(intent.isPrivateOnly)
             is MessageBoardIntent.UpdateNickname -> updateNickname(intent.nickname)
             is MessageBoardIntent.SubmitMessage -> submitMessage()
             is MessageBoardIntent.ToggleLike -> toggleLike(intent.messageId)
@@ -116,9 +182,42 @@ class MessageBoardViewModel @Inject constructor(
         }
     }
 
-    private fun onSelectCategory(category: MessageCategory?) {
-        selectedCategory.value = category
-        _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
+    private fun onSelectTab(tab: MessageBoardTab) {
+        selectedTab.value = tab
+        _uiState.update { it.copy(selectedTab = tab, isLoading = true) }
+    }
+
+    private fun openSearch() {
+        _uiState.update { it.copy(isSearchOpen = true) }
+    }
+
+    private fun closeSearch() {
+        searchQuery.value = ""
+        _uiState.update { it.copy(isSearchOpen = false, searchQuery = "") }
+    }
+
+    private fun updateSearchQuery(query: String) {
+        searchQuery.value = query
+        _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    private fun executeSearch() {
+        val query = _uiState.value.searchQuery.trim()
+        if (query.isBlank()) return
+        searchResultQuery.value = query
+        _uiState.update { it.copy(isSearchOpen = false, isSearchResultOpen = true) }
+    }
+
+    private fun closeSearchResult() {
+        searchResultQuery.value = ""
+        _uiState.update {
+            it.copy(
+                isSearchResultOpen = false,
+                searchQuery = "",
+                searchResults = emptyList()
+            )
+        }
+        searchQuery.value = ""
     }
 
     private fun openEditor() {
@@ -127,6 +226,7 @@ class MessageBoardViewModel @Inject constructor(
             val content = draftRepository.draftContent.first()
             val categoryStr = draftRepository.draftCategory.first()
             val tagsStr = draftRepository.draftTags.first()
+            val profile = userRepository.userProfile.first()
 
             val category = if (categoryStr.isNotBlank()) {
                 MessageCategory.entries.find { it.name == categoryStr }
@@ -142,7 +242,8 @@ class MessageBoardViewModel @Inject constructor(
                     editorState = EditorState(
                         content = content,
                         selectedCategory = category,
-                        selectedTags = tags
+                        selectedTags = tags,
+                        nickname = profile.nickname
                     )
                 )
             }
@@ -199,8 +300,28 @@ class MessageBoardViewModel @Inject constructor(
         }
     }
 
+    private fun addAttachment(uri: String, mimeType: String?) {
+        val kind = if (mimeType?.startsWith("video") == true) MediaKind.Video else MediaKind.Image
+        val current = _uiState.value.editorState.attachments
+        if (current.any { it.uri == uri }) return
+        _uiState.update {
+            it.copy(editorState = it.editorState.copy(attachments = current + MediaAttachment(uri, kind)))
+        }
+    }
+
+    private fun removeAttachment(uri: String) {
+        val current = _uiState.value.editorState.attachments
+        _uiState.update {
+            it.copy(editorState = it.editorState.copy(attachments = current.filterNot { a -> a.uri == uri }))
+        }
+    }
+
     private fun setAnonymous(isAnonymous: Boolean) {
         _uiState.update { it.copy(editorState = it.editorState.copy(isAnonymous = isAnonymous)) }
+    }
+
+    private fun setPrivateOnly(isPrivateOnly: Boolean) {
+        _uiState.update { it.copy(editorState = it.editorState.copy(isPrivateOnly = isPrivateOnly)) }
     }
 
     private fun updateNickname(nickname: String) {
@@ -221,7 +342,6 @@ class MessageBoardViewModel @Inject constructor(
         val validationError = when {
             editor.selectedCategory == null -> "请选择主题分区"
             editor.content.isBlank() -> "请输入内容"
-            !editor.isAnonymous && editor.nickname.isBlank() -> "请输入昵称"
             else -> null
         }
         if (validationError != null) {
@@ -233,15 +353,22 @@ class MessageBoardViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(editorState = it.editorState.copy(isSubmitting = true)) }
             try {
-                val author = if (editor.isAnonymous || editor.nickname.isBlank()) "匿名妈妈" else editor.nickname
+                val profile = userRepository.userProfile.first()
+                val author = if (editor.isAnonymous) {
+                    "momo"
+                } else {
+                    profile.nickname.ifBlank { editor.nickname }.ifBlank { "momo" }
+                }
                 Log.d("Submit", "3. 开始写数据库, author=$author")
 
                 val newId = repository.postMessage(
                     content = editor.content,
                     category = editor.selectedCategory!!,
                     tags = editor.selectedTags,
+                    attachments = editor.attachments,
                     author = author,
-                    isAnonymous = editor.isAnonymous
+                    isAnonymous = editor.isAnonymous,
+                    isPrivateOnly = editor.isPrivateOnly
                 )
                 draftRepository.clearDraft()
                 Log.d("Submit", "4. 数据库写入成功! 新留言ID=$newId")
@@ -298,9 +425,8 @@ class MessageBoardViewModel @Inject constructor(
     private fun retry() {
         Log.d("MessageBoard", "用户点击重试")
         _uiState.update { it.copy(errorMessage = null, isLoading = true) }
-        // 重新触发当前分类的 Flow 订阅
-        val current = selectedCategory.value
-        selectedCategory.value = current  // 触发 collectLatest 重新订阅
+        val current = selectedTab.value
+        selectedTab.value = current
     }
 
     private fun refresh() {
@@ -327,11 +453,66 @@ class MessageBoardViewModel @Inject constructor(
                     content = "这是第 $i 条测试留言，用来测滚动性能。今天宝宝又闹腾了一晚上，我感觉自己快撑不住了。",
                     category = categories[i % categories.size],
                     tags = listOf("睡眠不足"),
+                    attachments = emptyList(),
                     author = "测试妈妈$i",
-                    isAnonymous = false
+                    isAnonymous = false,
+                    isPrivateOnly = false
                 )
             }
             Log.d("MessageBoard", "插入 100 条测试数据完成")
         }
     }
 }
+
+/*
+==================== 原有内容（保留，勿删）====================
+
+data class MessageBoardUiState(
+    val messages: List<Message> = emptyList(),
+    val selectedCategory: MessageCategory? = null,  // null = 全部
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val isRefreshing: Boolean = false,
+    val isEditorOpen: Boolean = false,
+    val editorState: EditorState = EditorState()
+)
+
+data class EditorState(
+    val content: String = "",
+    val selectedCategory: MessageCategory? = null,
+    val selectedTags: List<String> = emptyList(),
+    val isAnonymous: Boolean = true,
+    val nickname: String = "",
+    val isSubmitting: Boolean = false,
+    val submitError: String? = null
+)
+
+sealed class MessageBoardIntent {
+    data class SelectCategory(val category: MessageCategory?) : MessageBoardIntent()
+}
+*/
+
+/*
+==================== 原有内容（保留，勿删）- 匿名作者旧逻辑 ====================
+
+// val author = if (editor.isAnonymous || editor.nickname.isBlank()) "匿名妈妈" else editor.nickname
+//
+// repository.postMessage(
+//     content = editor.content,
+//     category = editor.selectedCategory!!,
+//     tags = editor.selectedTags,
+//     author = author,
+//     isAnonymous = editor.isAnonymous
+// )
+*/
+
+/*
+==================== 原有内容（保留，勿删）- 非匿名昵称校验旧逻辑 ====================
+
+// val validationError = when {
+//     editor.selectedCategory == null -> "请选择主题分区"
+//     editor.content.isBlank() -> "请输入内容"
+//     !editor.isAnonymous && editor.nickname.isBlank() -> "请输入昵称"
+//     else -> null
+// }
+*/

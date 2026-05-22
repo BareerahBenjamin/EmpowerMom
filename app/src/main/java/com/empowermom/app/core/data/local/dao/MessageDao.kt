@@ -11,16 +11,22 @@ interface MessageDao {
 
     // ── 查询 ──────────────────────────────────────────────────────────────────
 
-    @Query("SELECT * FROM messages WHERE isHidden = 0 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM messages WHERE isHidden = 0 AND isPrivateOnly = 0 ORDER BY timestamp DESC")
     fun observeAllMessages(): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE category = :category AND isHidden = 0 ORDER BY timestamp DESC")
+    @Query("SELECT * FROM messages WHERE category = :category AND isHidden = 0 AND isPrivateOnly = 0 ORDER BY timestamp DESC")
     fun observeMessagesByCategory(category: String): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE isPrivateOnly = 1 OR isHidden = 1 ORDER BY timestamp DESC")
+    fun observePrivateMessages(): Flow<List<MessageEntity>>
 
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun getMessageById(id: Long): MessageEntity?
 
-    @Query("SELECT COUNT(*) FROM messages WHERE isHidden = 0")
+    @Query("SELECT * FROM messages WHERE id = :id")
+    fun observeMessageById(id: Long): Flow<MessageEntity?>
+
+    @Query("SELECT COUNT(*) FROM messages WHERE isHidden = 0 AND isPrivateOnly = 0")
     suspend fun getMessageCount(): Int
 
     // ── 写入 ──────────────────────────────────────────────────────────────────
@@ -84,3 +90,25 @@ interface UserInteractionDao {
     @Query("SELECT messageId FROM user_interactions WHERE interactionType = 'resonance'")
     suspend fun getResonatedMessageIds(): List<Long>
 }
+
+/*
+==================== 原有内容（保留，勿删）====================
+
+@Dao
+interface MessageDao {
+
+    // ── 查询 ──────────────────────────────────────────────────────────────────
+
+    @Query("SELECT * FROM messages WHERE isHidden = 0 ORDER BY timestamp DESC")
+    fun observeAllMessages(): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE category = :category AND isHidden = 0 ORDER BY timestamp DESC")
+    fun observeMessagesByCategory(category: String): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE id = :id")
+    suspend fun getMessageById(id: Long): MessageEntity?
+
+    @Query("SELECT COUNT(*) FROM messages WHERE isHidden = 0")
+    suspend fun getMessageCount(): Int
+}
+*/

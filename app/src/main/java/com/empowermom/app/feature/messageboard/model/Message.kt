@@ -6,7 +6,8 @@ import java.util.Date
  * 留言板核心数据模型
  *
  * 对应产品功能：
- * - 支持4个分区：情绪树洞 / 育儿求助 / 经验分享 / 身材恢复
+ * - 支持分区：情绪树洞 / 妈妈互助 / 家庭关系
+ * - 支持“仅自己可见”（私密）
  * - 匿名发布
  * - 标签系统
  * - AI 回应
@@ -18,6 +19,7 @@ data class Message(
     val author: String,
     val category: MessageCategory,
     val tags: List<String> = emptyList(),
+    val attachments: List<MediaAttachment> = emptyList(),
     val timestamp: Date = Date(),
     val likes: Int = 0,
     val resonances: Int = 0,   // "我也经历过" 共鸣数
@@ -26,9 +28,20 @@ data class Message(
     val aiResponse: String = "",
     val isCrisis: Boolean = false,   // 危机内容标记
     val isHidden: Boolean = false,   // 危机内容仅自己可见
+    val isPrivateOnly: Boolean = false, // 用户选择“仅自己可见”
     val isLiked: Boolean = false,    // 当前用户是否已点赞
     val isResonated: Boolean = false // 当前用户是否已共鸣
 )
+
+data class MediaAttachment(
+    val uri: String,
+    val kind: MediaKind
+)
+
+enum class MediaKind {
+    Image,
+    Video
+}
 
 data class Reply(
     val id: Long = 0,
@@ -45,9 +58,8 @@ data class Reply(
  */
 enum class MessageCategory(val displayName: String, val iconDescription: String) {
     EMOTION("情绪树洞", "heart"),
-    PARENTING("育儿求助", "question"),
-    EXPERIENCE("经验分享", "lightbulb"),
-    RECOVERY("身材恢复", "child");
+    MOM_HELP("妈妈互助", "hands"),
+    FAMILY_RELATION("家庭关系", "home");
 
     companion object {
         fun fromValue(value: String): MessageCategory? =
@@ -119,3 +131,23 @@ object CrisisHotlines {
         )
     )
 }
+
+/*
+==================== 原有内容（保留，勿删）====================
+
+/**
+ * 留言分区枚举
+ * 对应 HTML 中的 Tab 分区
+ */
+enum class MessageCategory(val displayName: String, val iconDescription: String) {
+    EMOTION("情绪树洞", "heart"),
+    PARENTING("育儿求助", "question"),
+    EXPERIENCE("经验分享", "lightbulb"),
+    RECOVERY("身材恢复", "child");
+
+    companion object {
+        fun fromValue(value: String): MessageCategory? =
+            entries.find { it.name.lowercase() == value.lowercase() }
+    }
+}
+*/

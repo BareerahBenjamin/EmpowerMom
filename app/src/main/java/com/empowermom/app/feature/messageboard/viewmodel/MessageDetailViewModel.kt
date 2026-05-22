@@ -3,11 +3,15 @@ package com.empowermom.app.feature.messageboard.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.empowermom.app.core.data.repository.MessageRepository
+import com.empowermom.app.core.data.repository.UserRepository
 import com.empowermom.app.feature.messageboard.model.Message
+import com.empowermom.app.feature.profile.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -23,11 +27,18 @@ data class MessageDetailUiState(
 
 @HiltViewModel
 class MessageDetailViewModel @Inject constructor(
-    private val repository: MessageRepository
+    private val repository: MessageRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessageDetailUiState(isLoading = true))
     val uiState: StateFlow<MessageDetailUiState> = _uiState.asStateFlow()
+
+    val userProfile: StateFlow<UserProfile> = userRepository.userProfile.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = UserProfile()
+    )
 
     fun loadMessage(messageId: Long) {
         viewModelScope.launch {

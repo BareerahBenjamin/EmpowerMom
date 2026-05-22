@@ -10,6 +10,7 @@ import com.empowermom.app.feature.messageboard.model.CrisisKeywords
 import com.empowermom.app.core.network.PromptTemplates
 import com.empowermom.app.feature.messageboard.model.Message
 import com.empowermom.app.feature.messageboard.model.MessageCategory
+import com.empowermom.app.feature.messageboard.model.MediaAttachment
 import com.empowermom.app.feature.messageboard.model.Reply
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -31,23 +32,23 @@ class MessageRepository @Inject constructor(
 
     // ── 查询留言列表（响应式，带分类过滤）──────────────────────────────────────
 
-    fun observeMessages(category: MessageCategory? = null): Flow<List<Message>> {
-        val entitiesFlow = if (category == null) {
-            messageDao.observeAllMessages()
-        } else {
-            messageDao.observeMessagesByCategory(category.name)
+    fun observeMessages(
+        category: MessageCategory? = null,
+        privateOnly: Boolean = false
+    ): Flow<List<Message>> {
+        val entitiesFlow = when {
+            privateOnly -> messageDao.observePrivateMessages()
+            category == null -> messageDao.observeAllMessages()
+            else -> messageDao.observeMessagesByCategory(category.name)
         }
 
         return entitiesFlow.map { entities ->
             val likedIds = userInteractionDao.getLikedMessageIds().toSet()
             val resonatedIds = userInteractionDao.getResonatedMessageIds().toSet()
 
-            // 危机帖（isHidden = true）从列表中过滤掉，避免其他妈妈看到。
-            // TODO(C): 等有用户系统后，让作者本人能看到自己的危机帖。
-            entities.filter { !it.isHidden }.map { entity ->
-                val replies = replyDao.observeRepliesByMessageId(entity.id)
+            entities.map { entity ->
                 entity.toMessage(
-                    replies = emptyList(), // 列表页不加载回复，详情页加载
+                    replies = emptyList(),
                     isLiked = entity.id in likedIds,
                     isResonated = entity.id in resonatedIds,
                     gson = gson
@@ -62,8 +63,10 @@ class MessageRepository @Inject constructor(
         content: String,
         category: MessageCategory,
         tags: List<String>,
+        attachments: List<MediaAttachment>,
         author: String,
-        isAnonymous: Boolean
+        isAnonymous: Boolean,
+        isPrivateOnly: Boolean
     ): Long {
         val isCrisis = CrisisKeywords.detect(content)
         val entity = MessageEntity(
@@ -71,10 +74,12 @@ class MessageRepository @Inject constructor(
             author = author,
             category = category.name,
             tagsJson = gson.toJson(tags),
+            attachmentsJson = gson.toJson(attachments),
             timestamp = Date().time,
             isAnonymous = isAnonymous,
             isCrisis = isCrisis,
-            isHidden = isCrisis // 危机内容默认隐藏（仅自己可见）
+            isHidden = isCrisis,
+            isPrivateOnly = isPrivateOnly
         )
         return messageDao.insertMessage(entity)
     }
@@ -164,10 +169,11 @@ class MessageRepository @Inject constructor(
     // ── 查询单条留言（含回复，响应式）──────────────────────────────────────────
 
     fun observeMessageWithReplies(messageId: Long): Flow<Message?> {
+        val messageFlow = messageDao.observeMessageById(messageId)
         val repliesFlow = replyDao.observeRepliesByMessageId(messageId)
 
-        return repliesFlow.map { replyEntities ->
-            val messageEntity = messageDao.getMessageById(messageId) ?: return@map null
+        return combine(messageFlow, repliesFlow) { messageEntity, replyEntities ->
+            if (messageEntity == null) return@combine null
             val likedIds = userInteractionDao.getLikedMessageIds().toSet()
             val resonatedIds = userInteractionDao.getResonatedMessageIds().toSet()
 
@@ -205,12 +211,19 @@ class MessageRepository @Inject constructor(
         } catch (e: Exception) {
             emptyList()
         }
+        val attachmentType = object : TypeToken<List<MediaAttachment>>() {}.type
+        val attachments: List<MediaAttachment> = try {
+            gson.fromJson(attachmentsJson, attachmentType) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
         return Message(
             id = id,
             content = content,
             author = author,
             category = MessageCategory.valueOf(category),
             tags = tagList,
+            attachments = attachments,
             timestamp = Date(timestamp),
             likes = likes,
             resonances = resonances,
@@ -219,6 +232,7 @@ class MessageRepository @Inject constructor(
             aiResponse = aiResponse,
             isCrisis = isCrisis,
             isHidden = isHidden,
+            isPrivateOnly = isPrivateOnly,
             isLiked = isLiked,
             isResonated = isResonated
         )
@@ -234,3 +248,45 @@ class MessageRepository @Inject constructor(
         // 真实实现:remoteApi.fetchLatest() → 写入 Room
     }
 }
+
+/*
+==================== 原有内容（保留，勿删）====================
+
+fun observeMessages(category: MessageCategory? = null): Flow<List<Message>> {
+    val entitiesFlow = if (category == null) {
+        messageDao.observeAllMessages()
+    } else {
+        messageDao.observeMessagesByCategory(category.name)
+    }
+
+    return entitiesFlow.map { entities ->
+        val likedIds = userInteractionDao.getLikedMessageIds().toSet()
+        val resonatedIds = userInteractionDao.getResonatedMessageIds().toSet()
+
+        // 危机帖（isHidden = true）从列表中过滤掉，避免其他妈妈看到。
+        // TODO(C): 等有用户系统后，让作者本人能看到自己的危机帖。
+        entities.filter { !it.isHidden }.map { entity ->
+            val replies = replyDao.observeRepliesByMessageId(entity.id)
+            entity.toMessage(
+                replies = emptyList(), // 列表页不加载回复，详情页加载
+                isLiked = entity.id in likedIds,
+                isResonated = entity.id in resonatedIds,
+                gson = gson
+            )
+        }
+    }
+}
+*/
+
+/*
+==================== 原有内容（保留，勿删）- postMessage 旧签名 ====================
+
+// suspend fun postMessage(
+//     content: String,
+//     category: MessageCategory,
+//     tags: List<String>,
+//     author: String,
+//     isAnonymous: Boolean,
+//     isPrivateOnly: Boolean
+// ): Long
+*/

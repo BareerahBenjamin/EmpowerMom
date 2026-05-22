@@ -14,6 +14,7 @@ data class MessageEntity(
     val author: String,
     val category: String,          // MessageCategory.name
     val tagsJson: String = "[]",   // JSON array of tag strings
+    val attachmentsJson: String = "[]",
     val timestamp: Long = Date().time,
     val likes: Int = 0,
     val resonances: Int = 0,
@@ -21,6 +22,7 @@ data class MessageEntity(
     val aiResponse: String = "",
     val isCrisis: Boolean = false,
     val isHidden: Boolean = false,
+    val isPrivateOnly: Boolean = false,
     val syncStatus: String = "local" // "local" | "synced" | "pending"
 )
 
@@ -56,3 +58,47 @@ data class UserInteractionEntity(
     val interactionType: String,   // "like" | "resonance"
     val timestamp: Long = Date().time
 )
+
+/*
+==================== 原有内容（保留，勿删）====================
+
+@Entity(tableName = "messages")
+data class MessageEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val content: String,
+    val author: String,
+    val category: String,          // MessageCategory.name
+    val tagsJson: String = "[]",   // JSON array of tag strings
+    val timestamp: Long = Date().time,
+    val likes: Int = 0,
+    val resonances: Int = 0,
+    val isAnonymous: Boolean = true,
+    val aiResponse: String = "",
+    val isCrisis: Boolean = false,
+    val isHidden: Boolean = false,
+    val syncStatus: String = "local" // "local" | "synced" | "pending"
+)
+*/
+
+/*
+==================== 原有内容（保留，勿删）- MessageEntity 无附件字段 ====================
+
+// data class MessageEntity(
+//     @PrimaryKey(autoGenerate = true)
+//     val id: Long = 0,
+//     val content: String,
+//     val author: String,
+//     val category: String,
+//     val tagsJson: String = "[]",
+//     val timestamp: Long = Date().time,
+//     val likes: Int = 0,
+//     val resonances: Int = 0,
+//     val isAnonymous: Boolean = true,
+//     val aiResponse: String = "",
+//     val isCrisis: Boolean = false,
+//     val isHidden: Boolean = false,
+//     val isPrivateOnly: Boolean = false,
+//     val syncStatus: String = "local"
+// )
+*/
