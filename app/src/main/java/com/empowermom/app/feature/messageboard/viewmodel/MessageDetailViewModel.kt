@@ -1,7 +1,9 @@
 package com.empowermom.app.feature.messageboard.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.empowermom.app.core.data.repository.AuthRepository
 import com.empowermom.app.core.data.repository.MessageRepository
 import com.empowermom.app.core.data.repository.UserRepository
 import com.empowermom.app.feature.messageboard.model.Message
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,17 +25,21 @@ data class MessageDetailUiState(
     val error: String? = null,
     // 回复发送状态
     val isPostingReply: Boolean = false,
-    val replyError: String? = null
+    val replyError: String? = null,
+    val isAnonymous: Boolean = true
 )
 
 @HiltViewModel
 class MessageDetailViewModel @Inject constructor(
     private val repository: MessageRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessageDetailUiState(isLoading = true))
     val uiState: StateFlow<MessageDetailUiState> = _uiState.asStateFlow()
+
+    val currentUserId: String? get() = authRepository.currentUserId()
 
     val userProfile: StateFlow<UserProfile> = userRepository.userProfile.stateIn(
         scope = viewModelScope,
@@ -73,11 +80,18 @@ class MessageDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isPostingReply = true, replyError = null) }
             try {
+                val isAnonymous = _uiState.value.isAnonymous
+                val profile = userRepository.userProfile.first()
+                val author = if (isAnonymous) {
+                    "momo"
+                } else {
+                    profile.nickname.ifBlank { "momo" }
+                }
                 repository.postReply(
                     messageId = messageId,
                     content = content,
-                    author = "匿名妈妈",
-                    isAnonymous = true
+                    author = author,
+                    isAnonymous = isAnonymous
                 )
                 _uiState.update { it.copy(isPostingReply = false, replyError = null) }
                 onSuccess()
@@ -92,10 +106,35 @@ class MessageDetailViewModel @Inject constructor(
         }
     }
 
+    fun toggleAnonymous(isAnonymous: Boolean) {
+        _uiState.update { it.copy(isAnonymous = isAnonymous) }
+    }
+
     /**
      * 清除错误提示（用户重新编辑时调用）
      */
     fun clearReplyError() {
         _uiState.update { it.copy(replyError = null) }
+    }
+
+    fun deleteMessage(messageId: Long, onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                val success = repository.deleteMessage(messageId)
+                if (success) onDeleted()
+            } catch (e: Exception) {
+                Log.e("MessageDetail", "删除留言失败: ${e.message}", e)
+            }
+        }
+    }
+
+    fun deleteReply(replyId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.deleteReply(replyId)
+            } catch (e: Exception) {
+                Log.e("MessageDetail", "删除回复失败: ${e.message}", e)
+            }
+        }
     }
 }

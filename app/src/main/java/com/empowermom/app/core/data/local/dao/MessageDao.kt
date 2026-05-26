@@ -52,8 +52,31 @@ interface MessageDao {
     @Query("UPDATE messages SET aiResponse = :response WHERE id = :id")
     suspend fun updateAiResponse(id: Long, response: String)
 
+    @Query("UPDATE messages SET syncStatus = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: Long, status: String)
+
     @Delete
     suspend fun deleteMessage(message: MessageEntity)
+
+    @Query("DELETE FROM messages WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMessage(message: MessageEntity)
+
+    // ── 同步相关 ──────────────────────────────────────────────────────────
+
+    @Query("SELECT * FROM messages WHERE syncStatus = 'local'")
+    suspend fun getUnsyncedMessages(): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getMessageByRemoteId(remoteId: Long): MessageEntity?
+
+    @Query("SELECT * FROM messages")
+    suspend fun getAllMessages(): List<MessageEntity>
+
+    @Query("UPDATE messages SET remoteId = :remoteId, syncStatus = 'synced' WHERE id = :localId")
+    suspend fun markSynced(localId: Long, remoteId: Long)
 }
 
 @Dao
@@ -70,6 +93,20 @@ interface ReplyDao {
 
     @Query("DELETE FROM replies WHERE messageId = :messageId")
     suspend fun deleteRepliesByMessageId(messageId: Long)
+
+    // ── 同步相关 ──────────────────────────────────────────────────────────
+
+    @Query("SELECT * FROM replies WHERE syncStatus = 'local'")
+    suspend fun getUnsyncedReplies(): List<ReplyEntity>
+
+    @Query("SELECT * FROM replies WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): ReplyEntity?
+
+    @Query("SELECT * FROM replies WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getReplyByRemoteId(remoteId: Long): ReplyEntity?
+
+    @Query("UPDATE replies SET remoteId = :remoteId, syncStatus = 'synced' WHERE id = :localId")
+    suspend fun markSynced(localId: Long, remoteId: Long)
 }
 
 @Dao
@@ -89,6 +126,14 @@ interface UserInteractionDao {
 
     @Query("SELECT messageId FROM user_interactions WHERE interactionType = 'resonance'")
     suspend fun getResonatedMessageIds(): List<Long>
+
+    // ── 同步相关 ──────────────────────────────────────────────────────────
+
+    @Query("SELECT * FROM user_interactions WHERE syncStatus = 'local'")
+    suspend fun getUnsyncedInteractions(): List<UserInteractionEntity>
+
+    @Query("UPDATE user_interactions SET syncStatus = 'synced' WHERE messageId = :messageId AND interactionType = :type")
+    suspend fun markInteractionSynced(messageId: Long, type: String)
 }
 
 /*

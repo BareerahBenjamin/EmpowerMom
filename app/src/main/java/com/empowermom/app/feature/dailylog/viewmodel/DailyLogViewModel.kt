@@ -1,8 +1,10 @@
 package com.empowermom.app.feature.dailylog.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.empowermom.app.core.data.repository.DailyLogRepository
+import com.empowermom.app.core.data.repository.SupabaseRepository
 import com.empowermom.app.feature.dailylog.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -34,7 +36,8 @@ data class DailyLogUiState(
 
     // 今天是否已记录
     val todayLogId: Long? = null,
-    val isPrivate: Boolean = false
+    val isPrivate: Boolean = false,
+    val syncStatus: String = ""
 )
 
 // ── Intent ────────────────────────────────────────────────────────────────────
@@ -55,7 +58,8 @@ sealed class DailyLogIntent {
 
 @HiltViewModel
 class DailyLogViewModel @Inject constructor(
-    private val repository: DailyLogRepository
+    private val repository: DailyLogRepository,
+    private val supabaseRepository: SupabaseRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DailyLogUiState())
@@ -75,6 +79,24 @@ class DailyLogViewModel @Inject constructor(
             val today = repository.getTodayLog()
             if (today != null) {
                 _uiState.update { it.copy(todayLogId = today.id, isPrivate = today.isPrivate) }
+            }
+        }
+        // 订阅同步状态
+        viewModelScope.launch {
+            repository.lastSyncResult.collect { status ->
+                _uiState.update { it.copy(syncStatus = status) }
+            }
+        }
+        // 从 Supabase 拉取远程速记
+        viewModelScope.launch {
+            try {
+                // 诊断表访问
+                val diag = supabaseRepository.testTableAccess()
+                Log.d("DailyLog", "Supabase 表诊断: $diag")
+
+                repository.refreshFromRemote()
+            } catch (e: Exception) {
+                Log.e("DailyLog", "拉取远程速记失败: ${e.message}")
             }
         }
     }
@@ -134,33 +156,41 @@ class DailyLogViewModel @Inject constructor(
 
     private fun generateCard() {
         val state = _uiState.value
+        Log.d("DailyLog", "generateCard: q1=${state.q1Selected?.text}, q2=${state.q2Selected?.text}, q3=${state.q3Text}")
         _uiState.update { it.copy(isGenerating = true, isCardVisible = true) }
 
         viewModelScope.launch {
-            // 先保存到数据库
-            val log = DailyLog(
-                q1Type     = state.currentCore.type,
-                q1Answer   = state.q1Selected?.text ?: "未选择",
-                q1Color    = state.q1Selected?.colorToken ?: "",
-                q2Question = state.currentLife.title,
-                q2Answer   = state.q2Selected?.text ?: "未选择",
-                q3Question = state.currentOpen.title,
-                q3Text     = state.q3Text
-            )
-            val id = repository.save(log)
-            _uiState.update { it.copy(todayLogId = id) }
+            try {
+                // 先保存到数据库
+                val log = DailyLog(
+                    q1Type     = state.currentCore.type,
+                    q1Answer   = state.q1Selected?.text ?: "未选择",
+                    q1Color    = state.q1Selected?.colorToken ?: "",
+                    q2Question = state.currentLife.title,
+                    q2Answer   = state.q2Selected?.text ?: "未选择",
+                    q3Question = state.currentOpen.title,
+                    q3Text     = state.q3Text
+                )
+                val id = repository.save(log)
+                Log.d("DailyLog", "保存成功 id=$id")
+                _uiState.update { it.copy(todayLogId = id) }
 
-            // 异步请求 AI 文案
-            val aiText = repository.generateCardText(
-                q1Type     = state.currentCore.type,
-                q1Answer   = state.q1Selected?.text ?: "未选择",
-                q2Question = state.currentLife.title,
-                q2Answer   = state.q2Selected?.text ?: "未选择",
-                q3Question = state.currentOpen.title,
-                q3Text     = state.q3Text
-            )
-            repository.updateAiCardText(id, aiText)
-            _uiState.update { it.copy(aiCardText = aiText, isGenerating = false) }
+                // 异步请求 AI 文案
+                val aiText = repository.generateCardText(
+                    q1Type     = state.currentCore.type,
+                    q1Answer   = state.q1Selected?.text ?: "未选择",
+                    q2Question = state.currentLife.title,
+                    q2Answer   = state.q2Selected?.text ?: "未选择",
+                    q3Question = state.currentOpen.title,
+                    q3Text     = state.q3Text
+                )
+                Log.d("DailyLog", "AI 文案: $aiText")
+                repository.updateAiCardText(id, aiText)
+                _uiState.update { it.copy(aiCardText = aiText, isGenerating = false) }
+            } catch (e: Exception) {
+                Log.e("DailyLog", "生成卡片失败: ${e.message}", e)
+                _uiState.update { it.copy(isGenerating = false, aiCardText = "今天也辛苦了，你已经很棒了 💛") }
+            }
         }
     }
 

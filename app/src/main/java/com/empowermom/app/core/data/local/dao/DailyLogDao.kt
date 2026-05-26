@@ -18,6 +18,9 @@ interface DailyLogDao {
     @Query("SELECT * FROM daily_logs WHERE date >= :startOfDay AND date < :endOfDay LIMIT 1")
     suspend fun getTodayLog(startOfDay: Long, endOfDay: Long): DailyLogEntity?
 
+    @Query("SELECT * FROM daily_logs WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): DailyLogEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: DailyLogEntity): Long
 
@@ -29,4 +32,21 @@ interface DailyLogDao {
 
     @Query("SELECT COUNT(*) FROM daily_logs")
     suspend fun getTotalCount(): Int
+
+    // ── 同步相关 ──────────────────────────────────────────────────────────
+
+    @Query("SELECT * FROM daily_logs WHERE syncStatus = 'local'")
+    suspend fun getUnsyncedLogs(): List<DailyLogEntity>
+
+    @Query("SELECT * FROM daily_logs")
+    suspend fun getAllLogs(): List<DailyLogEntity>
+
+    @Query("SELECT * FROM daily_logs WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getByRemoteId(remoteId: Long): DailyLogEntity?
+
+    @Query("UPDATE daily_logs SET remoteId = :remoteId, syncStatus = 'synced' WHERE id = :localId")
+    suspend fun markSynced(localId: Long, remoteId: Long)
+
+    @Query("UPDATE daily_logs SET aiCardText = :text, syncStatus = 'local' WHERE id = :id")
+    suspend fun updateAiCardTextAndMarkDirty(id: Long, text: String)
 }

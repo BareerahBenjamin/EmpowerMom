@@ -127,6 +127,38 @@ object QuestionBank {
         OpenQuestion("自我放过",     "今天你允许自己哪件事没做好？"),
     )
 
+    // ── 愉悦度 / 心情可视化辅助 ────────────────────────────────────────────────
+
+    // 把 Q1 colorToken 归一化为 0~1 愉悦度分值
+    fun positivityScore(token: String): Float = when (token) {
+        "sunny", "rainbow", "full", "warm", "light", "quiet" -> 1.0f
+        "charging", "normal"                                  -> 0.6f
+        "cloudy", "off", "heavy"                              -> 0.4f
+        "fog", "rain", "low", "cold", "loud"                  -> 0.15f
+        else                                                  -> 0.5f
+    }
+
+    // 心情节点上显示的 emoji（取 Q1 选项 emoji，没记录就空字符串）
+    fun emojiFromToken(token: String): String = when (token) {
+        "sunny"    -> "☀️"
+        "cloudy"   -> "☁️"
+        "fog"      -> "🌫️"
+        "rain"     -> "⛈️"
+        "rainbow"  -> "🌈"
+        "full"     -> "🔋"
+        "low"      -> "🪫"
+        "charging" -> "🔌"
+        "off"      -> "📴"
+        "warm"     -> "💡"
+        "cold"     -> "🧊"
+        "heavy"    -> "🪵"
+        "light"    -> "🍏"
+        "quiet"    -> "🔇"
+        "normal"   -> "📻"
+        "loud"     -> "📢"
+        else       -> "🌷"
+    }
+
     // Q1 颜色 token 映射为暖色主题对应颜色
     fun colorFromToken(token: String): androidx.compose.ui.graphics.Color {
         return when (token) {

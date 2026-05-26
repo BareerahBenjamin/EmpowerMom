@@ -17,5 +17,8 @@ data class DailyLogEntity(
     val q3Question: String = "",
     val q3Text: String = "",
     val aiCardText: String = "",
-    val isPrivate: Boolean = false
+    val isPrivate: Boolean = false,
+    val remoteId: Long? = null,
+    val syncStatus: String = "local",
+    val userId: String? = null
 )

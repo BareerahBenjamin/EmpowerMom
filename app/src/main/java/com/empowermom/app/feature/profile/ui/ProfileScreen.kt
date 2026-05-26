@@ -1,5 +1,8 @@
 package com.empowermom.app.feature.profile.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,11 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.empowermom.app.core.ui.theme.EmpowerMomColors
 import com.empowermom.app.feature.profile.model.AvatarOptions
 import com.empowermom.app.feature.profile.viewmodel.ProfileIntent
@@ -32,7 +39,8 @@ import com.empowermom.app.feature.profile.viewmodel.ProfileViewModel
 
 @Composable
 fun ProfileScreen(
-    viewModel: ProfileViewModel = hiltViewModel()
+    viewModel: ProfileViewModel = hiltViewModel(),
+    onNavigateToHistory: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -47,20 +55,25 @@ fun ProfileScreen(
         EditProfileScreen(
             nickname      = uiState.editNickname,
             selectedAvatar = uiState.editAvatar,
+            avatarPhotoPath = uiState.editAvatarPhotoPath,
             babyAgeDays   = uiState.editBabyAgeDays,
             nicknameError = uiState.nicknameError,
-            isFirstTime   = !uiState.profile.isLoggedIn,
+            isFirstTime   = !uiState.profile.isProfileComplete,
+            accountEmail  = uiState.accountEmail,
             onNicknameChange    = { viewModel.handleIntent(ProfileIntent.UpdateNickname(it)) },
             onAvatarChange      = { viewModel.handleIntent(ProfileIntent.UpdateAvatar(it)) },
+            onAvatarPhotoChange = { viewModel.handleIntent(ProfileIntent.UpdateAvatarPhoto(it)) },
             onBabyAgeDaysChange = { viewModel.handleIntent(ProfileIntent.UpdateBabyAgeDays(it)) },
             onSave   = { viewModel.handleIntent(ProfileIntent.SaveProfile) },
             onCancel = { viewModel.handleIntent(ProfileIntent.CancelEdit) }
         )
     } else {
         MyProfileScreen(
-            profile  = uiState.profile,
-            onEdit   = { viewModel.handleIntent(ProfileIntent.StartEdit) },
-            onLogout = { viewModel.handleIntent(ProfileIntent.Logout) }
+            profile      = uiState.profile,
+            accountEmail = uiState.accountEmail,
+            onEdit       = { viewModel.handleIntent(ProfileIntent.StartEdit) },
+            onSignOut    = { viewModel.handleIntent(ProfileIntent.SignOut) },
+            onNavigateToHistory = onNavigateToHistory
         )
     }
 }
@@ -72,11 +85,14 @@ fun ProfileScreen(
 private fun EditProfileScreen(
     nickname: String,
     selectedAvatar: String,
+    avatarPhotoPath: String,
     babyAgeDays: Int,
     nicknameError: String?,
     isFirstTime: Boolean,
+    accountEmail: String?,
     onNicknameChange: (String) -> Unit,
     onAvatarChange: (String) -> Unit,
+    onAvatarPhotoChange: (String) -> Unit,
     onBabyAgeDaysChange: (Int) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
@@ -115,33 +131,130 @@ private fun EditProfileScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "这里是你的专属空间 💛",
+                            "完善你的个人资料 💛",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "填写简单的资料，让我们更好地陪伴你。你的信息仅存在本设备上，完全私密。",
+                            "设置昵称和头像后，留言板会默认使用你的昵称。资料会保存在本设备并与账号同步使用。",
                             style = MaterialTheme.typography.bodySmall,
                             color = EmpowerMomColors.TextMid
                         )
+                        accountEmail?.let { email ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "当前账号：$email",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmpowerMomColors.Rose
+                            )
+                        }
                     }
                 }
             }
 
             // ── 选择头像 ──────────────────────────────────────────────────────
-            SectionCard(title = "选择你的头像") {
+            SectionCard(title = "你的头像") {
+                val context = LocalContext.current
+                val hasPhoto = avatarPhotoPath.isNotBlank()
+
+                // 头像预览 + 上传按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 头像预览圆圈
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(EmpowerMomColors.PeachPale, EmpowerMomColors.AmberPale)
+                                )
+                            )
+                            .border(2.dp, EmpowerMomColors.PeachLight, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (hasPhoto) {
+                            val imageModel = if (avatarPhotoPath.startsWith("http")) {
+                                avatarPhotoPath
+                            } else {
+                                java.io.File(avatarPhotoPath)
+                            }
+                            AsyncImage(
+                                model = imageModel,
+                                contentDescription = "头像",
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(selectedAvatar, fontSize = 40.sp)
+                        }
+                    }
+
+                    // 上传按钮
+                    val photoPicker = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.GetContent()
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            // 复制到 app 内部存储，保证持久访问
+                            val file = java.io.File(context.filesDir, "avatar_photo.jpg")
+                            context.contentResolver.openInputStream(it)?.use { input ->
+                                file.outputStream().use { output -> input.copyTo(output) }
+                            }
+                            onAvatarPhotoChange(file.absolutePath)
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { photoPicker.launch("image/*") },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmpowerMomColors.Peach),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.CameraAlt, contentDescription = null,
+                                modifier = Modifier.size(18.dp), tint = Color.White
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("上传照片", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (hasPhoto) {
+                            TextButton(
+                                onClick = { onAvatarPhotoChange("") },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("清除照片，使用 emoji", style = MaterialTheme.typography.labelSmall, color = EmpowerMomColors.TextMid)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
+                Spacer(Modifier.height(10.dp))
+
+                // emoji 选择器
+                Text(
+                    "或选择 emoji 头像",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EmpowerMomColors.TextLight,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(5),
-                    modifier = Modifier.height(160.dp),
+                    modifier = Modifier.height(120.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(AvatarOptions.emojis) { emoji ->
-                        val isSelected = emoji == selectedAvatar
+                        val isSelected = !hasPhoto && emoji == selectedAvatar
                         Box(
                             modifier = Modifier
-                                .size(52.dp)
+                                .size(46.dp)
                                 .clip(CircleShape)
                                 .background(
                                     if (isSelected) EmpowerMomColors.PeachPale
@@ -156,7 +269,7 @@ private fun EditProfileScreen(
                                 .clickable { onAvatarChange(emoji) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(emoji, fontSize = 24.sp)
+                            Text(emoji, fontSize = 22.sp)
                         }
                     }
                 }
@@ -243,10 +356,12 @@ private fun EditProfileScreen(
 @Composable
 private fun MyProfileScreen(
     profile: com.empowermom.app.feature.profile.model.UserProfile,
+    accountEmail: String?,
     onEdit: () -> Unit,
-    onLogout: () -> Unit
+    onSignOut: () -> Unit,
+    onNavigateToHistory: () -> Unit
 ) {
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showSignOutDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -298,12 +413,26 @@ private fun MyProfileScreen(
                             .border(2.dp, EmpowerMomColors.PeachLight, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(profile.avatarEmoji, fontSize = 36.sp)
+                        if (profile.avatarPhotoPath.isNotBlank()) {
+                            val imageModel = if (profile.avatarPhotoPath.startsWith("http")) {
+                                profile.avatarPhotoPath
+                            } else {
+                                java.io.File(profile.avatarPhotoPath)
+                            }
+                            AsyncImage(
+                                model = imageModel,
+                                contentDescription = "头像",
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(profile.avatarEmoji, fontSize = 36.sp)
+                        }
                     }
 
                     Column {
                         Text(
-                            profile.nickname,
+                            profile.nickname.ifBlank { "未设置昵称" },
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Medium
                         )
@@ -316,7 +445,42 @@ private fun MyProfileScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = EmpowerMomColors.TextMid
                         )
+                        accountEmail?.let { email ->
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                email,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmpowerMomColors.TextLight
+                            )
+                        }
                     }
+                }
+            }
+
+            // ── 编辑资料入口 ───────────────────────────────────────────────────
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onEdit),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(Icons.Outlined.Edit, contentDescription = null, tint = EmpowerMomColors.Rose)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("编辑个人资料", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Text(
+                            "修改昵称、头像和宝宝月龄",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = EmpowerMomColors.TextLight
+                        )
+                    }
+                    Text("›", fontSize = 18.sp, color = EmpowerMomColors.TextLight)
                 }
             }
 
@@ -328,11 +492,11 @@ private fun MyProfileScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column {
-                    ProfileMenuItem(emoji = "📋", title = "我的速记", subtitle = "查看历史身心记录")
+                    ProfileMenuItem(emoji = "📋", title = "我的速记", subtitle = "查看历史身心记录", onClick = onNavigateToHistory)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
-                    ProfileMenuItem(emoji = "💬", title = "我的留言", subtitle = "查看发布过的留言")
+                    ProfileMenuItem(emoji = "💬", title = "我的留言", subtitle = "查看发布过的留言", onClick = onNavigateToHistory)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
-                    ProfileMenuItem(emoji = "🔒", title = "隐私说明", subtitle = "数据仅存在本设备，完全私密")
+                    ProfileMenuItem(emoji = "🔒", title = "隐私说明", subtitle = "数据仅存在本设备，完全私密", onClick = onNavigateToHistory)
                 }
             }
 
@@ -361,33 +525,32 @@ private fun MyProfileScreen(
 
             // ── 退出登录 ───────────────────────────────────────────────────────
             OutlinedButton(
-                onClick = { showLogoutDialog = true },
+                onClick = { showSignOutDialog = true },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp, MaterialTheme.colorScheme.outline
                 )
             ) {
-                Text("重置资料", color = MaterialTheme.colorScheme.onSurface)
+                Text("退出登录", color = MaterialTheme.colorScheme.onSurface)
             }
 
             Spacer(Modifier.height(24.dp))
         }
     }
 
-    // 退出确认弹窗
-    if (showLogoutDialog) {
+    if (showSignOutDialog) {
         AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("重置资料") },
-            text  = { Text("将清空昵称和头像设置，本地记录数据不会删除。确认吗？") },
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text("退出登录") },
+            text  = { Text("将退出当前账号并清空个人资料设置，本地速记数据不会删除。确认吗？") },
             confirmButton = {
-                TextButton(onClick = { showLogoutDialog = false; onLogout() }) {
+                TextButton(onClick = { showSignOutDialog = false; onSignOut() }) {
                     Text("确认", color = EmpowerMomColors.Rose)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
+                TextButton(onClick = { showSignOutDialog = false }) {
                     Text("取消")
                 }
             },
@@ -423,11 +586,11 @@ private fun SectionCard(
 }
 
 @Composable
-private fun ProfileMenuItem(emoji: String, title: String, subtitle: String) {
+private fun ProfileMenuItem(emoji: String, title: String, subtitle: String, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { }
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

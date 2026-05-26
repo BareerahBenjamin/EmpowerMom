@@ -2,6 +2,8 @@ package com.empowermom.app.core.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 import com.empowermom.app.core.data.local.dao.DailyLogDao
 import com.empowermom.app.core.data.local.dao.MessageDao
@@ -17,9 +19,9 @@ import com.empowermom.app.core.data.local.entity.UserInteractionEntity
         MessageEntity::class,
         ReplyEntity::class,
         UserInteractionEntity::class,
-        DailyLogEntity::class,          // ← 新增
+        DailyLogEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,39 +29,17 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun replyDao(): ReplyDao
     abstract fun userInteractionDao(): UserInteractionDao
-    abstract fun dailyLogDao(): DailyLogDao   // ← 新增
+    abstract fun dailyLogDao(): DailyLogDao
 
     companion object {
         const val DATABASE_NAME = "empowermom.db"
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE daily_logs ADD COLUMN remoteId INTEGER")
+                db.execSQL("ALTER TABLE daily_logs ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'local'")
+                db.execSQL("ALTER TABLE daily_logs ADD COLUMN userId TEXT")
+            }
+        }
     }
 }
-
-/*
-==================== 原有内容（保留，勿删）====================
-
-@Database(
-    entities = [
-        MessageEntity::class,
-        ReplyEntity::class,
-        UserInteractionEntity::class,
-        DailyLogEntity::class,          // ← 新增
-    ],
-    version = 2,                        // ← 从 1 升到 2
-    exportSchema = true
-)
-*/
-
-/*
-==================== 原有内容（保留，勿删）- version 3 ====================
-
-@Database(
-    entities = [
-        MessageEntity::class,
-        ReplyEntity::class,
-        UserInteractionEntity::class,
-        DailyLogEntity::class,
-    ],
-    version = 3,
-    exportSchema = true
-)
-*/

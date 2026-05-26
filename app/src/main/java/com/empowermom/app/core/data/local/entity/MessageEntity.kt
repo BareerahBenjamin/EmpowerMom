@@ -10,6 +10,8 @@ import java.util.Date
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val remoteId: Long? = null,    // Supabase 返回的远程 ID
+    val userId: String? = null,    // 发帖用户的 Supabase auth ID
     val content: String,
     val author: String,
     val category: String,          // MessageCategory.name
@@ -41,11 +43,14 @@ data class MessageEntity(
 data class ReplyEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val remoteId: Long? = null,    // Supabase 返回的远程 ID
+    val userId: String? = null,    // 回复用户的 Supabase auth ID
     val messageId: Long,
     val content: String,
     val author: String,
     val timestamp: Long = Date().time,
-    val isAnonymous: Boolean = true
+    val isAnonymous: Boolean = true,
+    val syncStatus: String = "local"
 )
 
 // 用于记录用户对留言的点赞/共鸣状态（本地存储）
@@ -56,7 +61,8 @@ data class ReplyEntity(
 data class UserInteractionEntity(
     val messageId: Long,
     val interactionType: String,   // "like" | "resonance"
-    val timestamp: Long = Date().time
+    val timestamp: Long = Date().time,
+    val syncStatus: String = "local"
 )
 
 /*

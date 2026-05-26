@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -31,9 +32,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.empowermom.app.core.ui.theme.EmpowerMomColors
 import com.empowermom.app.core.ui.theme.EmpowerMomTheme
+import com.empowermom.app.feature.auth.ui.AuthScreen
+import com.empowermom.app.feature.auth.viewmodel.AuthViewModel
+import com.empowermom.app.feature.profile.ui.ProfileScreen
+import com.empowermom.app.feature.profile.viewmodel.ProfileViewModel
 import com.empowermom.app.navigation.AppNavGraph
 import com.empowermom.app.navigation.Screen
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.hilt.navigation.compose.hiltViewModel
 
 // 底部导航栏数据类
 private data class NavTab(
@@ -50,6 +56,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             EmpowerMomTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    val authViewModel: AuthViewModel = hiltViewModel()
+                    val authState by authViewModel.uiState.collectAsState()
+                    val profileViewModel: ProfileViewModel = hiltViewModel()
+                    val profileState by profileViewModel.uiState.collectAsState()
+
+                    if (!authState.isAuthenticated) {
+                        AuthScreen(
+                            onLoginSuccess = {},
+                            viewModel = authViewModel
+                        )
+                        return@Surface
+                    }
+
+                    // 登录后若尚未填写资料，先引导完成个人资料
+                    if (!profileState.isLoading && !profileState.profile.isProfileComplete) {
+                        ProfileScreen(viewModel = profileViewModel)
+                        return@Surface
+                    }
+
                     val navController = rememberNavController()
                     val currentBackStack by navController.currentBackStackEntryAsState()
                     val currentRoute = currentBackStack?.destination?.route

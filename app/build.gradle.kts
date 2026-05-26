@@ -12,6 +12,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -31,6 +32,9 @@ android {
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
         }
+
+        buildConfigField("String", "SUPABASE_URL",     "\"${localProperties["SUPABASE_URL"]}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY","\"${localProperties["SUPABASE_ANON_KEY"]}\"")
     }
 
     buildTypes {
@@ -114,4 +118,11 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.realtime)
+    implementation(libs.supabase.storage)
+    implementation(libs.ktor.client.okhttp)
 }

@@ -14,9 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.empowermom.app.core.ui.theme.EmpowerMomColors
 import com.empowermom.app.feature.messageboard.viewmodel.MessageDetailViewModel
 import androidx.compose.foundation.layout.imePadding
 
@@ -36,11 +38,50 @@ fun MessageDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
+    val currentUserId = viewModel.currentUserId
     var replyText by remember { mutableStateOf("") }
     val replyFocusRequester = remember { FocusRequester() }
+    var showDeleteMessageDialog by remember { mutableStateOf(false) }
+    var deleteReplyId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(messageId) {
         viewModel.loadMessage(messageId)
+    }
+
+    // 删除留言确认弹窗
+    if (showDeleteMessageDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteMessageDialog = false },
+            title = { Text("删除留言") },
+            text = { Text("删除留言将同时删除所有回复，确定要继续吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteMessageDialog = false
+                    viewModel.deleteMessage(messageId) { onNavigateBack() }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMessageDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 删除回复确认弹窗
+    deleteReplyId?.let { replyId ->
+        AlertDialog(
+            onDismissRequest = { deleteReplyId = null },
+            title = { Text("删除回复") },
+            text = { Text("确定要删除这条回复吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteReply(replyId)
+                    deleteReplyId = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteReplyId = null }) { Text("取消") }
+            }
+        )
     }
 
     Scaffold(
@@ -64,6 +105,39 @@ fun MessageDetailScreen(
             ) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 0.5.dp)
 
+                // 匿名开关
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (uiState.isAnonymous) "🦖" else userProfile.avatarEmoji,
+                            fontSize = 16.sp
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (uiState.isAnonymous) "匿名回复" else "${userProfile.nickname.ifBlank { "momo" }} 回复",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.isAnonymous,
+                        onCheckedChange = { viewModel.toggleAnonymous(it) },
+                        modifier = Modifier.height(28.dp),
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = EmpowerMomColors.Rose,
+                            checkedTrackColor = EmpowerMomColors.PeachPale,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                }
+
                 // 错误提示（仅在有错误时显示）
                 uiState.replyError?.let { error ->
                     Text(
@@ -72,14 +146,14 @@ fun MessageDetailScreen(
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .padding(horizontal = 12.dp, vertical = 2.dp)
                     )
                 }
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -113,7 +187,7 @@ fun MessageDetailScreen(
                         },
                         shape = MaterialTheme.shapes.small,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
+                            containerColor = EmpowerMomColors.Peach
                         ),
                         // 发送中或内容为空时禁用按钮
                         enabled = replyText.isNotBlank() && !uiState.isPostingReply
@@ -144,7 +218,9 @@ fun MessageDetailScreen(
                         onLikeClick = { viewModel.toggleLike(messageId) },
                         onResonanceClick = { viewModel.toggleResonance(messageId) },
                         onReplyClick = { replyFocusRequester.requestFocus() },
-                        onCardClick = {}
+                        onCardClick = {},
+                        currentUserId = currentUserId,
+                        onDeleteClick = { showDeleteMessageDialog = true }
                     )
                 }
 
@@ -205,7 +281,12 @@ fun MessageDetailScreen(
                     }
                 } else {
                     items(message.replies) { reply ->
-                        ReplyItem(reply = reply)
+                        ReplyItem(
+                            reply = reply,
+                            userProfile = userProfile,
+                            currentUserId = currentUserId,
+                            onDeleteClick = { deleteReplyId = reply.id }
+                        )
                     }
                 }
             }
@@ -214,7 +295,12 @@ fun MessageDetailScreen(
 }
 
 @Composable
-private fun ReplyItem(reply: com.empowermom.app.feature.messageboard.model.Reply) {
+private fun ReplyItem(
+    reply: com.empowermom.app.feature.messageboard.model.Reply,
+    userProfile: com.empowermom.app.feature.profile.model.UserProfile,
+    currentUserId: String?,
+    onDeleteClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -230,8 +316,43 @@ private fun ReplyItem(reply: com.empowermom.app.feature.messageboard.model.Reply
                     .size(32.dp)
                     .clip(CircleShape)
             )
+        } else if (!reply.isAnonymous && reply.author == userProfile.nickname && userProfile.avatarEmoji.isNotBlank()) {
+            // 非匿名且是自己的回复：显示用户头像
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(EmpowerMomColors.PeachPale)
+                    .then(
+                        if (userProfile.avatarPhotoPath.isNotBlank()) Modifier
+                        else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (userProfile.avatarPhotoPath.isNotBlank()) {
+                    coil.compose.AsyncImage(
+                        model = userProfile.avatarPhotoPath,
+                        contentDescription = "头像",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
+                    Text(userProfile.avatarEmoji, fontSize = 16.sp)
+                }
+            }
+        } else if (reply.isAnonymous) {
+            // 匿名回复：显示恐龙 emoji
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(EmpowerMomColors.PeachPale),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🦖", fontSize = 16.sp)
+            }
         } else {
-            // 默认头像
+            // 其他用户的非匿名回复：显示首字母
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -239,11 +360,10 @@ private fun ReplyItem(reply: com.empowermom.app.feature.messageboard.model.Reply
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = "默认头像",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    reply.author.take(1),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -256,14 +376,31 @@ private fun ReplyItem(reply: com.empowermom.app.feature.messageboard.model.Reply
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(reply.author, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    formatRelativeTime(reply.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        formatRelativeTime(reply.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    if (currentUserId != null && reply.userId == currentUserId) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DeleteOutline,
+                                contentDescription = "删除回复",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(reply.content, style = MaterialTheme.typography.bodyMedium)

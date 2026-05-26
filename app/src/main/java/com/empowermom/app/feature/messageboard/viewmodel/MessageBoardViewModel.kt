@@ -3,6 +3,7 @@ package com.empowermom.app.feature.messageboard.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.empowermom.app.core.data.repository.MessageRepository
+import com.empowermom.app.core.data.repository.AuthRepository
 import com.empowermom.app.core.data.repository.DraftRepository
 import com.empowermom.app.core.data.repository.UserRepository
 import com.empowermom.app.feature.messageboard.model.Message
@@ -15,6 +16,7 @@ import com.empowermom.app.feature.profile.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import android.util.Log
@@ -82,19 +84,24 @@ sealed class MessageBoardIntent {
     data class ToggleResonance(val messageId: Long) : MessageBoardIntent()
     data object Retry : MessageBoardIntent()
     data object Refresh : MessageBoardIntent()
+    data class DeleteMessage(val messageId: Long) : MessageBoardIntent()
 }
 
 // ── ViewModel ──────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class MessageBoardViewModel @Inject constructor(
     private val repository: MessageRepository,
     private val draftRepository: DraftRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessageBoardUiState(isLoading = true))
     val uiState: StateFlow<MessageBoardUiState> = _uiState.asStateFlow()
+
+    val currentUserId: String? get() = authRepository.currentUserId()
 
     val userProfile: StateFlow<UserProfile> = userRepository.userProfile.stateIn(
         scope = viewModelScope,
@@ -118,6 +125,9 @@ class MessageBoardViewModel @Inject constructor(
     val presetTags = PresetTags.all
 
     init {
+        // 首次加载：从 Supabase 拉取最新数据
+        refresh()
+
         // 响应 Tab 切换，重新订阅留言列表
         viewModelScope.launch {
             selectedTab.collectLatest { tab ->
@@ -179,6 +189,7 @@ class MessageBoardViewModel @Inject constructor(
             is MessageBoardIntent.ToggleResonance -> toggleResonance(intent.messageId)
             is MessageBoardIntent.Retry -> retry()
             is MessageBoardIntent.Refresh -> refresh()
+            is MessageBoardIntent.DeleteMessage -> deleteMessage(intent.messageId)
         }
     }
 
@@ -440,6 +451,16 @@ class MessageBoardViewModel @Inject constructor(
                 // 刷新失败不弹错态，静默失败即可，本地数据还在
             } finally {
                 _uiState.update { it.copy(isRefreshing = false) }
+            }
+        }
+    }
+
+    private fun deleteMessage(messageId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.deleteMessage(messageId)
+            } catch (e: Exception) {
+                Log.e("MessageBoard", "删除留言失败: ${e.message}", e)
             }
         }
     }

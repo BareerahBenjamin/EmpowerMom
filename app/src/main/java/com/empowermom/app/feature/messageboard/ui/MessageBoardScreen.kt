@@ -68,6 +68,9 @@ fun MessageBoardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
+    val currentUserId = viewModel.currentUserId
+    var deleteConfirmMessageId by remember { mutableStateOf<Long?>(null) }
+
     // 监听跳转事件：危机帖发布后自动跳转到详情页
     LaunchedEffect(Unit) {
         viewModel.navigateToDetail.collectLatest { messageId ->
@@ -81,6 +84,24 @@ fun MessageBoardScreen(
             onQueryChange = { viewModel.handleIntent(MessageBoardIntent.UpdateSearchQuery(it)) },
             onSearch = { viewModel.handleIntent(MessageBoardIntent.ExecuteSearch) },
             onDismiss = { viewModel.handleIntent(MessageBoardIntent.CloseSearch) }
+        )
+    }
+
+    // 删除确认弹窗
+    deleteConfirmMessageId?.let { messageId ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmMessageId = null },
+            title = { Text("删除留言") },
+            text = { Text("确定要删除这条留言吗？删除后不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.handleIntent(MessageBoardIntent.DeleteMessage(messageId))
+                    deleteConfirmMessageId = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConfirmMessageId = null }) { Text("取消") }
+            }
         )
     }
 
@@ -174,7 +195,9 @@ fun MessageBoardScreen(
                                         viewModel.handleIntent(MessageBoardIntent.ToggleResonance(message.id))
                                     },
                                     onReplyClick = { onNavigateToDetail(message.id) },
-                                    onCardClick = { onNavigateToDetail(message.id) }
+                                    onCardClick = { onNavigateToDetail(message.id) },
+                                    currentUserId = currentUserId,
+                                    onDeleteClick = { deleteConfirmMessageId = message.id }
                                 )
                             }
                         }
@@ -535,7 +558,9 @@ fun MessageCard(
     onResonanceClick: () -> Unit,
     onReplyClick: () -> Unit,
     onCardClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currentUserId: String? = null,
+    onDeleteClick: (() -> Unit)? = null
 ) {
     val borderColor = if (message.isCrisis) EmpowerMomColors.CrisisRed
     else MaterialTheme.colorScheme.outline
@@ -609,14 +634,30 @@ fun MessageCard(
                         )
                     }
                 }
-                // 分类标签（对应 HTML 的右上角分区badge）
-                Text(
-                    text = message.category.displayName,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
-                        .border(0.5.dp, MaterialTheme.colorScheme.outline)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                // 分类标签 + 删除按钮
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = message.category.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .border(0.5.dp, MaterialTheme.colorScheme.outline)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    if (currentUserId != null && message.userId == currentUserId && onDeleteClick != null) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DeleteOutline,
+                                contentDescription = "删除",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
             }
 
             // 分隔线
@@ -1278,7 +1319,7 @@ private fun PreviewMessageBoardTopBarAndCards() {
                 items(items = listOf(demoMessage, demoMessage.copy(id = 2, content = "有人也经历过吗？", attachments = emptyList()))) { msg ->
                     MessageCard(
                         message = msg,
-                        userProfile = UserProfile(nickname = "momo", avatarEmoji = "🌸", isLoggedIn = true),
+                        userProfile = UserProfile(nickname = "momo", avatarEmoji = "🌸", isProfileComplete = true),
                         onLikeClick = {},
                         onResonanceClick = {},
                         onReplyClick = {},
@@ -1306,7 +1347,7 @@ private fun PreviewSearchResultScreen() {
             results = listOf(demoMessage, demoMessage.copy(id = 2, content = "睡不够真的会影响情绪。")),
             onBack = {},
             onNavigateToDetail = {},
-            userProfile = UserProfile(nickname = "momo", avatarEmoji = "🌸", isLoggedIn = true)
+            userProfile = UserProfile(nickname = "momo", avatarEmoji = "🌸", isProfileComplete = true)
         )
     }
 }

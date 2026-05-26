@@ -17,6 +17,9 @@ sealed class Screen(val route: String) {
     // ── 我的（个人资料 / 登录）────────────────────────────────────────────────
     data object Profile : Screen("profile")
 
+    // ── 我的记录（速记/留言/隐私）─────────────────────────────────────────────
+    data object MyHistory : Screen("my_history")
+
     // ── 家庭协同（P2 占位）────────────────────────────────────────────────────
     data object Family : Screen("family")
 }

@@ -11,6 +11,7 @@ import com.empowermom.app.feature.dailylog.ui.DailyLogScreen
 import com.empowermom.app.feature.family.ui.FamilyScreen
 import com.empowermom.app.feature.messageboard.ui.MessageBoardScreen
 import com.empowermom.app.feature.messageboard.ui.MessageDetailScreen
+import com.empowermom.app.feature.profile.ui.MyHistoryScreen
 import com.empowermom.app.feature.profile.ui.ProfileScreen
 import com.empowermom.app.feature.sandbox.ui.SandboxScreen
 
@@ -56,7 +57,21 @@ fun AppNavGraph(
 
         // ── 我的（个人资料 / 登录）────────────────────────────────────────────
         composable(Screen.Profile.route) {
-            ProfileScreen()
+            ProfileScreen(
+                onNavigateToHistory = {
+                    navController.navigate(Screen.MyHistory.route)
+                }
+            )
+        }
+
+        // ── 我的记录 ────────────────────────────────────────────────────────
+        composable(Screen.MyHistory.route) {
+            MyHistoryScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToMessageDetail = { messageId ->
+                    navController.navigate(Screen.MessageDetail.createRoute(messageId))
+                }
+            )
         }
 
         // ── 家庭协同（P2 占位）────────────────────────────────────────────────

@@ -2,6 +2,9 @@ package com.empowermom.app.feature.profile.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
+import com.empowermom.app.core.data.repository.AuthRepository
+import com.empowermom.app.core.data.repository.SupabaseRepository
 import com.empowermom.app.core.data.repository.UserRepository
 import com.empowermom.app.feature.profile.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,12 +19,14 @@ import javax.inject.Inject
 
 data class ProfileUiState(
     val profile: UserProfile = UserProfile(),
+    val accountEmail: String? = null,
     val isLoading: Boolean = true,
 
     // 编辑状态（填写/修改资料时用）
     val isEditing: Boolean = false,
     val editNickname: String = "",
     val editAvatar: String = "🌸",
+    val editAvatarPhotoPath: String = "",
     val editBabyAgeDays: Int = 0,
     val nicknameError: String? = null
 )
@@ -32,9 +37,10 @@ sealed class ProfileIntent {
     data object StartEdit : ProfileIntent()
     data object CancelEdit : ProfileIntent()
     data object SaveProfile : ProfileIntent()
-    data object Logout : ProfileIntent()
+    data object SignOut : ProfileIntent()
     data class UpdateNickname(val value: String) : ProfileIntent()
     data class UpdateAvatar(val emoji: String) : ProfileIntent()
+    data class UpdateAvatarPhoto(val path: String) : ProfileIntent()
     data class UpdateBabyAgeDays(val days: Int) : ProfileIntent()
 }
 
@@ -42,7 +48,9 @@ sealed class ProfileIntent {
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val authRepository: AuthRepository,
+    private val supabaseRepository: SupabaseRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -55,13 +63,30 @@ class ProfileViewModel @Inject constructor(
                     state.copy(
                         profile = profile,
                         isLoading = false,
-                        // 未登录时直接进入编辑模式
-                        isEditing = !profile.isLoggedIn,
-                        editNickname = profile.nickname,
-                        editAvatar = profile.avatarEmoji,
-                        editBabyAgeDays = profile.babyAgeDays
+                        isEditing = if (!profile.isProfileComplete) true else state.isEditing,
+                        editNickname = if (state.isEditing) state.editNickname else profile.nickname,
+                        editAvatar = if (state.isEditing) state.editAvatar else profile.avatarEmoji,
+                        editAvatarPhotoPath = if (state.isEditing) state.editAvatarPhotoPath else profile.avatarPhotoPath,
+                        editBabyAgeDays = if (state.isEditing) state.editBabyAgeDays else profile.babyAgeDays
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            authRepository.currentUser.collect {
+                _uiState.update { it.copy(accountEmail = authRepository.currentUserEmail()) }
+            }
+        }
+        // 从 Supabase 拉取远程用户资料
+        viewModelScope.launch {
+            try {
+                // 诊断表访问
+                val diag = supabaseRepository.testTableAccess()
+                Log.d("Profile", "Supabase 表诊断: $diag")
+
+                userRepository.refreshFromRemote()
+            } catch (e: Exception) {
+                Log.e("Profile", "拉取远程用户资料失败: ${e.message}")
             }
         }
     }
@@ -71,12 +96,15 @@ class ProfileViewModel @Inject constructor(
             ProfileIntent.StartEdit  -> startEdit()
             ProfileIntent.CancelEdit -> cancelEdit()
             ProfileIntent.SaveProfile -> saveProfile()
-            ProfileIntent.Logout     -> logout()
+            ProfileIntent.SignOut    -> signOut()
             is ProfileIntent.UpdateNickname    -> _uiState.update {
                 it.copy(editNickname = intent.value, nicknameError = null)
             }
             is ProfileIntent.UpdateAvatar      -> _uiState.update {
-                it.copy(editAvatar = intent.emoji)
+                it.copy(editAvatar = intent.emoji, editAvatarPhotoPath = "")
+            }
+            is ProfileIntent.UpdateAvatarPhoto -> _uiState.update {
+                it.copy(editAvatarPhotoPath = intent.path)
             }
             is ProfileIntent.UpdateBabyAgeDays -> _uiState.update {
                 it.copy(editBabyAgeDays = intent.days)
@@ -91,6 +119,7 @@ class ProfileViewModel @Inject constructor(
                 isEditing = true,
                 editNickname = p.nickname,
                 editAvatar = p.avatarEmoji,
+                editAvatarPhotoPath = p.avatarPhotoPath,
                 editBabyAgeDays = p.babyAgeDays,
                 nicknameError = null
             )
@@ -98,8 +127,7 @@ class ProfileViewModel @Inject constructor(
     }
 
     private fun cancelEdit() {
-        // 首次设置不允许取消
-        if (!_uiState.value.profile.isLoggedIn) return
+        if (!_uiState.value.profile.isProfileComplete) return
         _uiState.update { it.copy(isEditing = false) }
     }
 
@@ -121,16 +149,18 @@ class ProfileViewModel @Inject constructor(
                 UserProfile(
                     nickname    = nickname,
                     avatarEmoji = state.editAvatar,
+                    avatarPhotoPath = state.editAvatarPhotoPath,
                     babyAgeDays = state.editBabyAgeDays,
-                    isLoggedIn  = true
+                    isProfileComplete = true
                 )
             )
             _uiState.update { it.copy(isEditing = false, nicknameError = null) }
         }
     }
 
-    private fun logout() {
+    private fun signOut() {
         viewModelScope.launch {
+            authRepository.signOut()
             userRepository.logout()
         }
     }
