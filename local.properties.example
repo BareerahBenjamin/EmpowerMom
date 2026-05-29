@@ -1,0 +1,12 @@
+# 复制此文件为 local.properties，填入你的实际值
+# cp local.properties.example local.properties
+
+# Android SDK 路径（自动生成，每台机器不同）
+sdk.dir=C\:\\Users\\你的用户名\\AppData\\Local\\Android\\Sdk
+
+# Supabase 配置
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+
+# DeepSeek AI
+DEEPSEEK_API_KEY=your-deepseek-api-key

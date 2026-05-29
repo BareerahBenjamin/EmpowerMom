@@ -26,6 +26,7 @@
 -keep class com.empowermom.app.feature.messageboard.model.** { *; }
 -keep class com.empowermom.app.core.data.** { *; }
 -keep class com.empowermom.app.core.data.remote.dto.** { *; }
+-keep class com.empowermom.app.core.network.** { *; }
 
 # Kotlin Serialization concrete DTOs — preserve serializer, Companion, all members
 -keep,includedescriptorclasses class com.empowermom.app.core.data.remote.dto.**$$serializer { *; }
