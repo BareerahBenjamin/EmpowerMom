@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -69,8 +72,17 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    // 登录后若尚未填写资料，先引导完成个人资料
-                    if (!profileState.isLoading && !profileState.profile.isProfileComplete) {
+                    // 登录后先等待「从 Supabase 拉取资料」完成，再决定是否引导填写资料。
+                    // 否则老用户每次登录都会在远程资料到达前误弹设置页（本地 logout 时已清空）。
+                    if (profileState.isLoading || !profileState.remoteChecked) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = EmpowerMomColors.Rose)
+                        }
+                        return@Surface
+                    }
+
+                    // 远程检查完成后仍无完整资料 → 视为新注册用户，引导填写一次
+                    if (!profileState.profile.isProfileComplete) {
                         ProfileScreen(viewModel = profileViewModel)
                         return@Surface
                     }

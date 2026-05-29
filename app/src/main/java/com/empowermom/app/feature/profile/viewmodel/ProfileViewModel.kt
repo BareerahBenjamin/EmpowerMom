@@ -21,6 +21,10 @@ data class ProfileUiState(
     val profile: UserProfile = UserProfile(),
     val accountEmail: String? = null,
     val isLoading: Boolean = true,
+    // 是否已完成「从 Supabase 拉取资料」的首次检查。
+    // 用于区分「新注册用户（远程也没有资料）」与「老用户登录（远程有资料，正在拉取）」，
+    // 避免在远程资料到达前就误弹个人信息设置页。
+    val remoteChecked: Boolean = false,
 
     // 编辑状态（填写/修改资料时用）
     val isEditing: Boolean = false,
@@ -63,7 +67,10 @@ class ProfileViewModel @Inject constructor(
                     state.copy(
                         profile = profile,
                         isLoading = false,
-                        isEditing = if (!profile.isProfileComplete) true else state.isEditing,
+                        // 资料未完成 → 自动进入编辑（新注册引导填写）；
+                        // 资料已完成（含远程拉取回来后）→ 退出编辑，显示资料视图，
+                        // 仅当用户通过"编辑"按钮显式进入时才由 startEdit() 置回 true。
+                        isEditing = if (!profile.isProfileComplete) true else false,
                         editNickname = if (state.isEditing) state.editNickname else profile.nickname,
                         editAvatar = if (state.isEditing) state.editAvatar else profile.avatarEmoji,
                         editAvatarPhotoPath = if (state.isEditing) state.editAvatarPhotoPath else profile.avatarPhotoPath,
@@ -72,21 +79,25 @@ class ProfileViewModel @Inject constructor(
                 }
             }
         }
+        // 监听登录状态：用户变为已登录时才拉取远程资料。
+        // 关键：ViewModel 在会话恢复/登录完成之前就创建了，若只在 init 里拉一次，
+        // 那一刻 currentUserId 还是 null → refreshFromRemote 直接 return，永远拉不到。
+        // 因此改为跟随 currentUser，登录就绪后再拉，老用户资料才能被恢复。
         viewModelScope.launch {
-            authRepository.currentUser.collect {
+            authRepository.currentUser.collect { user ->
                 _uiState.update { it.copy(accountEmail = authRepository.currentUserEmail()) }
-            }
-        }
-        // 从 Supabase 拉取远程用户资料
-        viewModelScope.launch {
-            try {
-                // 诊断表访问
-                val diag = supabaseRepository.testTableAccess()
-                Log.d("Profile", "Supabase 表诊断: $diag")
-
-                userRepository.refreshFromRemote()
-            } catch (e: Exception) {
-                Log.e("Profile", "拉取远程用户资料失败: ${e.message}")
+                if (user != null) {
+                    try {
+                        val diag = supabaseRepository.testTableAccess()
+                        Log.d("Profile", "Supabase 表诊断: $diag")
+                        userRepository.refreshFromRemote()
+                    } catch (e: Exception) {
+                        Log.e("Profile", "拉取远程用户资料失败: ${e.message}")
+                    } finally {
+                        // 已带着真实 userId 尝试过拉取，门控可据此决定是否引导新用户填写
+                        _uiState.update { it.copy(remoteChecked = true) }
+                    }
+                }
             }
         }
     }

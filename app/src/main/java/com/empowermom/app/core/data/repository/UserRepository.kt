@@ -120,15 +120,15 @@ class UserRepository @Inject constructor(
         }
     }
 
-    // 从 Supabase 拉取用户资料
-    suspend fun refreshFromRemote() {
+    // 从 Supabase 拉取用户资料。返回 true 表示远程存在有效资料（已同步到本地）。
+    suspend fun refreshFromRemote(): Boolean {
         try {
-            val userId = authRepository.currentUserId() ?: return
-            val dto = supabaseRepository.fetchUserProfile(userId) ?: return
-            val current = userProfile.first()
+            val userId = authRepository.currentUserId() ?: return false
+            val dto = supabaseRepository.fetchUserProfile(userId) ?: return false
 
-            // 只有远程数据更新时才覆盖本地（避免覆盖本地更完整的头像路径）
-            if (dto.nickname.isNotBlank() && dto.nickname != current.nickname) {
+            // 远程有有效昵称 → 该用户已设置过资料，无论本地是否相同都标记完成，
+            // 这样老用户登录（本地被 logout 清空）不会再被当成新用户引导填写。
+            if (dto.nickname.isNotBlank()) {
                 context.userDataStore.edit { prefs ->
                     prefs[KEY_NICKNAME] = dto.nickname
                     prefs[KEY_AVATAR] = dto.avatarEmoji
@@ -154,9 +154,12 @@ class UserRepository @Inject constructor(
                     }
                 }
                 Log.d(TAG, "远程用户资料已同步到本地")
+                return true
             }
+            return false
         } catch (e: Exception) {
             Log.e(TAG, "拉取远程用户资料失败: ${e.message}", e)
+            return false
         }
     }
 }

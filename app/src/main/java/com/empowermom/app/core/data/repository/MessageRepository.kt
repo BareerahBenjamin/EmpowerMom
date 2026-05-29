@@ -20,6 +20,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -42,6 +43,11 @@ class MessageRepository @Inject constructor(
     private val syncScope = CoroutineScope(Dispatchers.IO)
     private val TAG = "MessageRepository"
 
+    companion object {
+        /** 历史版本在 AI 失败时写入过的兜底句，用于识别并补生成这些脏数据 */
+        const val LEGACY_AI_FALLBACK = "谢谢你愿意分享这些。"
+    }
+
     // ── 查询留言列表（响应式，带分类过滤）──────────────────────────────────────
 
     fun observeMessages(
@@ -49,7 +55,7 @@ class MessageRepository @Inject constructor(
         privateOnly: Boolean = false
     ): Flow<List<Message>> {
         val entitiesFlow = when {
-            privateOnly -> messageDao.observePrivateMessages()
+            privateOnly -> messageDao.observePrivateMessages(authRepository.currentUserId() ?: "")
             category == null -> messageDao.observeAllMessages()
             else -> messageDao.observeMessagesByCategory(category.name)
         }
@@ -146,8 +152,14 @@ class MessageRepository @Inject constructor(
 
     // ── 生成 AI 回应 ──────────────────────────────────────────────────────────
 
+    /**
+     * 调用 DeepSeek 生成 AI 回应。
+     * 失败或返回空时**抛异常**（不再返回兜底句），交由上层决定是否重试 / 留空，
+     * 避免把通用兜底句写进数据库污染数据。
+     */
     suspend fun generateAiResponse(content: String, category: MessageCategory): String {
         val systemPrompt = PromptTemplates.forCategory(category)
+        Log.d(TAG, "AI请求: category=$category, apiKey=${com.empowermom.app.BuildConfig.DEEPSEEK_API_KEY.take(8)}..., content=${content.take(50)}")
 
         val request = com.empowermom.app.core.network.DeepSeekRequest(
             messages = listOf(
@@ -167,8 +179,61 @@ class MessageRepository @Inject constructor(
             request = request
         )
 
-        return response.choices.firstOrNull()?.message?.content
-            ?: "谢谢你愿意分享这些。"
+        val result = response.choices.firstOrNull()?.message?.content?.trim()
+        Log.d(TAG, "AI响应: choices=${response.choices.size}, content=${result?.take(50)}")
+        if (result.isNullOrBlank()) {
+            throw IllegalStateException("AI 返回空内容")
+        }
+        return result
+    }
+
+    /**
+     * 生成并写入 AI 回应，带指数退避重试。
+     * 全部失败后**不写兜底句**，让 aiResponse 保持空字符串（UI 显示"思考中"），
+     * 后续可由 [retryPendingAiResponses] 在刷新时补齐。
+     */
+    suspend fun tryGenerateAndStoreAiResponse(
+        messageId: Long,
+        content: String,
+        category: MessageCategory,
+        maxAttempts: Int = 3
+    ): Boolean {
+        var delayMs = 1_000L
+        repeat(maxAttempts) { attempt ->
+            try {
+                val aiResponse = generateAiResponse(content, category)
+                updateAiResponse(messageId, aiResponse)
+                Log.d(TAG, "AI 回应已写入 messageId=$messageId (第${attempt + 1}次)")
+                return true
+            } catch (e: Exception) {
+                Log.e(TAG, "AI 回应失败 messageId=$messageId 第${attempt + 1}/$maxAttempts 次: ${e.message}")
+                if (attempt < maxAttempts - 1) {
+                    delay(delayMs)
+                    delayMs *= 2
+                }
+            }
+        }
+        Log.w(TAG, "AI 回应最终失败 messageId=$messageId，保持留空待下次补生成")
+        return false
+    }
+
+    /**
+     * 后台补生成：扫描当前用户名下 AI 回应缺失或为历史兜底句的留言，逐条重新生成。
+     * 在每次下拉刷新后调用，让失败期间留空 / 被写脏的留言自动恢复。
+     */
+    suspend fun retryPendingAiResponses() {
+        val userId = authRepository.currentUserId() ?: return
+        val pending = messageDao.getMessagesNeedingAiResponse(userId, LEGACY_AI_FALLBACK)
+        if (pending.isEmpty()) return
+        Log.d(TAG, "补生成 AI 回应：${pending.size} 条待处理")
+        for (entity in pending) {
+            val category = try {
+                MessageCategory.valueOf(entity.category)
+            } catch (e: Exception) {
+                continue
+            }
+            tryGenerateAndStoreAiResponse(entity.id, entity.content, category, maxAttempts = 2)
+        }
     }
 
     // ── 点赞 / 取消点赞 ───────────────────────────────────────────────────────
@@ -388,10 +453,13 @@ class MessageRepository @Inject constructor(
 
     suspend fun refreshFromRemote() {
         try {
+            val currentUserId = authRepository.currentUserId()
             val remoteMessages = supabaseRepository.fetchMessages()
             Log.d(TAG, "拉取到 ${remoteMessages.size} 条远程帖子")
 
             for (dto in remoteMessages) {
+                // 跳过他人的私密帖子（自己的私密帖仍需拉取以便"私密"Tab展示）
+                if (dto.isPrivateOnly && dto.userId != currentUserId) continue
                 val existing = messageDao.getMessageByRemoteId(dto.id)
                 if (existing != null) {
                     // 更新已有帖子的计数和 AI 回应

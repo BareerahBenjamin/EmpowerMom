@@ -17,8 +17,8 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE category = :category AND isHidden = 0 AND isPrivateOnly = 0 ORDER BY timestamp DESC")
     fun observeMessagesByCategory(category: String): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE isPrivateOnly = 1 OR isHidden = 1 ORDER BY timestamp DESC")
-    fun observePrivateMessages(): Flow<List<MessageEntity>>
+    @Query("SELECT * FROM messages WHERE userId = :userId AND (isPrivateOnly = 1 OR isHidden = 1) ORDER BY timestamp DESC")
+    fun observePrivateMessages(userId: String): Flow<List<MessageEntity>>
 
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun getMessageById(id: Long): MessageEntity?
@@ -71,6 +71,13 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE remoteId = :remoteId LIMIT 1")
     suspend fun getMessageByRemoteId(remoteId: Long): MessageEntity?
+
+    /**
+     * 查询当前用户名下「AI 回应缺失或为兜底句」的留言，用于后台补生成。
+     * 既覆盖失败留空（aiResponse = ''），也覆盖历史上被写入兜底句的脏数据。
+     */
+    @Query("SELECT * FROM messages WHERE userId = :userId AND (aiResponse = '' OR aiResponse = :fallback)")
+    suspend fun getMessagesNeedingAiResponse(userId: String, fallback: String): List<MessageEntity>
 
     @Query("SELECT * FROM messages")
     suspend fun getAllMessages(): List<MessageEntity>

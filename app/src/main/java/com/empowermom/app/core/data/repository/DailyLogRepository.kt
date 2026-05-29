@@ -35,24 +35,28 @@ class DailyLogRepository @Inject constructor(
     private val _lastSyncResult = MutableStateFlow("")
     val lastSyncResult: StateFlow<String> = _lastSyncResult.asStateFlow()
 
-    // 观察所有记录
-    fun observeAll(): Flow<List<DailyLog>> =
-        dao.observeAll().map { list -> list.map { it.toDomain() } }
+    // 观察当前用户所有非私密记录（月历、时间线展示用，私密记录不显示）
+    fun observeAll(): Flow<List<DailyLog>> {
+        val userId = authRepository.currentUserId() ?: ""
+        return dao.observePublicLogs(userId).map { list -> list.map { it.toDomain() } }
+    }
 
     // 今天是否已记录
     suspend fun getTodayLog(): DailyLog? {
+        val userId = authRepository.currentUserId() ?: return null
         val cal = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0);      set(Calendar.MILLISECOND, 0)
         }
         val start = cal.timeInMillis
         val end   = start + 86_400_000L
-        return dao.getTodayLog(start, end)?.toDomain()
+        return dao.getTodayLog(userId, start, end)?.toDomain()
     }
 
     // 保存记录，返回 id
     suspend fun save(log: DailyLog): Long {
-        val entity = log.toEntity()
+        val userId = authRepository.currentUserId()
+        val entity = log.toEntity(userId = userId)
         val localId = dao.insert(entity)
         _lastSyncResult.value = "正在同步..."
 
@@ -127,15 +131,21 @@ class DailyLogRepository @Inject constructor(
         }
     }
 
-    // 获取最近 7 条，用于本周小结
-    suspend fun getRecentLogs(): List<DailyLog> =
-        dao.getRecentLogs().map { it.toDomain() }
+    // 获取当前用户最近 7 条非私密记录，用于本周小结
+    suspend fun getRecentLogs(): List<DailyLog> {
+        val userId = authRepository.currentUserId() ?: return emptyList()
+        return dao.getRecentPublicLogs(userId).map { it.toDomain() }
+    }
 
     // ── 从远程拉取速记数据 ──────────────────────────────────────────────
 
     suspend fun refreshFromRemote() {
         try {
             val userId = authRepository.currentUserId() ?: return
+
+            // 切换账号时清理其他用户的数据
+            dao.deleteOtherUsersData(userId)
+
             val remoteLogs = supabaseRepository.fetchDailyLogs(userId)
             Log.d(TAG, "拉取到 ${remoteLogs.size} 条远程速记")
 
@@ -293,11 +303,12 @@ $detail
         aiCardText = aiCardText, isPrivate = isPrivate
     )
 
-    private fun DailyLog.toEntity() = DailyLogEntity(
+    private fun DailyLog.toEntity(userId: String? = null) = DailyLogEntity(
         id = id, date = date,
         q1Type = q1Type, q1Answer = q1Answer, q1Color = q1Color,
         q2Question = q2Question, q2Answer = q2Answer,
         q3Question = q3Question, q3Text = q3Text,
-        aiCardText = aiCardText, isPrivate = isPrivate
+        aiCardText = aiCardText, isPrivate = isPrivate,
+        userId = userId
     )
 }

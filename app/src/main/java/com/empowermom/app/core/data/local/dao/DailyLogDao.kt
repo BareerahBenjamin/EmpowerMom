@@ -7,19 +7,34 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DailyLogDao {
 
-    @Query("SELECT * FROM daily_logs ORDER BY date DESC")
-    fun observeAll(): Flow<List<DailyLogEntity>>
+    // ── UI 查询（按 userId 隔离）──────────────────────────────────────────
+
+    @Query("SELECT * FROM daily_logs WHERE userId = :userId ORDER BY date DESC")
+    fun observeAll(userId: String): Flow<List<DailyLogEntity>>
+
+    // 仅非私密记录（用于月历、时间线展示）
+    @Query("SELECT * FROM daily_logs WHERE userId = :userId AND isPrivate = 0 ORDER BY date DESC")
+    fun observePublicLogs(userId: String): Flow<List<DailyLogEntity>>
 
     // 查询最近 7 条，用于生成本周小结
-    @Query("SELECT * FROM daily_logs ORDER BY date DESC LIMIT 7")
-    suspend fun getRecentLogs(): List<DailyLogEntity>
+    @Query("SELECT * FROM daily_logs WHERE userId = :userId ORDER BY date DESC LIMIT 7")
+    suspend fun getRecentLogs(userId: String): List<DailyLogEntity>
+
+    // 查询最近 7 条非私密记录（用于本周小结）
+    @Query("SELECT * FROM daily_logs WHERE userId = :userId AND isPrivate = 0 ORDER BY date DESC LIMIT 7")
+    suspend fun getRecentPublicLogs(userId: String): List<DailyLogEntity>
 
     // 查询今天是否已经记录过
-    @Query("SELECT * FROM daily_logs WHERE date >= :startOfDay AND date < :endOfDay LIMIT 1")
-    suspend fun getTodayLog(startOfDay: Long, endOfDay: Long): DailyLogEntity?
+    @Query("SELECT * FROM daily_logs WHERE userId = :userId AND date >= :startOfDay AND date < :endOfDay LIMIT 1")
+    suspend fun getTodayLog(userId: String, startOfDay: Long, endOfDay: Long): DailyLogEntity?
 
     @Query("SELECT * FROM daily_logs WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): DailyLogEntity?
+
+    @Query("SELECT COUNT(*) FROM daily_logs WHERE userId = :userId")
+    suspend fun getTotalCount(userId: String): Int
+
+    // ── 写入 ─────────────────────────────────────────────────────────────
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: DailyLogEntity): Long
@@ -30,16 +45,13 @@ interface DailyLogDao {
     @Query("UPDATE daily_logs SET isPrivate = :isPrivate WHERE id = :id")
     suspend fun updatePrivacy(id: Long, isPrivate: Boolean)
 
-    @Query("SELECT COUNT(*) FROM daily_logs")
-    suspend fun getTotalCount(): Int
-
     // ── 同步相关 ──────────────────────────────────────────────────────────
 
     @Query("SELECT * FROM daily_logs WHERE syncStatus = 'local'")
     suspend fun getUnsyncedLogs(): List<DailyLogEntity>
 
-    @Query("SELECT * FROM daily_logs")
-    suspend fun getAllLogs(): List<DailyLogEntity>
+    @Query("SELECT * FROM daily_logs WHERE userId = :userId")
+    suspend fun getLogsByUser(userId: String): List<DailyLogEntity>
 
     @Query("SELECT * FROM daily_logs WHERE remoteId = :remoteId LIMIT 1")
     suspend fun getByRemoteId(remoteId: Long): DailyLogEntity?
@@ -49,4 +61,8 @@ interface DailyLogDao {
 
     @Query("UPDATE daily_logs SET aiCardText = :text, syncStatus = 'local' WHERE id = :id")
     suspend fun updateAiCardTextAndMarkDirty(id: Long, text: String)
+
+    // 切换账号时清理其他用户的数据
+    @Query("DELETE FROM daily_logs WHERE userId != :currentUserId AND userId IS NOT NULL")
+    suspend fun deleteOtherUsersData(currentUserId: String)
 }

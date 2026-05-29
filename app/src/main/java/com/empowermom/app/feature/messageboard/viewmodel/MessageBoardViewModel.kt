@@ -394,16 +394,15 @@ class MessageBoardViewModel @Inject constructor(
                 }
 
                 // 异步触发 AI 回应（不阻塞 UI）
+                // 失败时不写兜底句，保持留空显示"思考中"，由刷新时的后台补生成兜底
                 viewModelScope.launch {
-                    try {
-                        Log.d("Submit", "6. 开始请求 AI 回应...")
-                        val aiResponse = repository.generateAiResponse(editor.content, editor.selectedCategory!!)
-                        repository.updateAiResponse(newId, aiResponse)
-                        Log.d("Submit", "7. ✅ AI 回应已写入: $aiResponse")
-                    } catch (e: Exception) {
-                        Log.e("Submit", "❌ AI 回应失败: ${e.message}", e)
-                        repository.updateAiResponse(newId, "谢谢你愿意分享这些。")
-                    }
+                    Log.d("Submit", "6. 开始请求 AI 回应...")
+                    val ok = repository.tryGenerateAndStoreAiResponse(
+                        messageId = newId,
+                        content = editor.content,
+                        category = editor.selectedCategory!!
+                    )
+                    Log.d("Submit", if (ok) "7. ✅ AI 回应已写入" else "7. ⚠️ AI 回应暂未生成，待刷新补齐")
                 }
             } catch (e: Exception) {
                 Log.e("Submit", "❌ 发布失败！异常: ${e.message}", e)
@@ -451,6 +450,14 @@ class MessageBoardViewModel @Inject constructor(
                 // 刷新失败不弹错态，静默失败即可，本地数据还在
             } finally {
                 _uiState.update { it.copy(isRefreshing = false) }
+            }
+            // 后台补生成：把失败留空 / 历史兜底句的留言重新跑一遍 AI（不阻塞刷新结束）
+            launch {
+                try {
+                    repository.retryPendingAiResponses()
+                } catch (e: Exception) {
+                    Log.e("MessageBoard", "AI 补生成失败: ${e.message}")
+                }
             }
         }
     }

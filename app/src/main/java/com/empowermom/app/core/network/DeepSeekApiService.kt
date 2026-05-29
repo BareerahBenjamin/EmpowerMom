@@ -25,7 +25,7 @@ interface DeepSeekApiService {
 data class DeepSeekRequest(
     val model: String = "deepseek-chat",
     val messages: List<DeepSeekMessage>,
-    val temperature: Double = 0.7,
+    val temperature: Double = 0.85,
     @SerializedName("max_tokens")
     val maxTokens: Int = 200
 )
